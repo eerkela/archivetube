@@ -1,5 +1,5 @@
 from __future__ import annotations
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 import json
 from os import stat
@@ -67,12 +67,10 @@ class Channel:
 
     @classmethod
     def from_local(cls,
-                   channel_id: str,
-                   parent_dir: Path | None = None,
+                   channel_path: Path,
                    progress_bar: bool = True) -> Channel:
-        parent_dir = cls.check.parent_dir(parent_dir, cls)
-        channel_id = cls.check.channel_id(channel_id, cls)
-        channel_path = Path(parent_dir, channel_id)
+        parent_dir = channel_path.parent
+        channel_id = channel_path.name
         info_path = Path(channel_path, "info.json")
         if not channel_path.exists():
             err_msg = (f"[{error_trace(cls)}] Channel directory does not "
@@ -103,11 +101,11 @@ class Channel:
 
     @classmethod
     def from_pytube(cls,
-                    channel_id: str,
+                    channel_url: str,
                     parent_dir: Path | None = None,
                     progress_bar: bool = True) -> Channel:
-        channel_id = cls.check.channel_id(channel_id, cls)
-        channel_url = channel_id_to_url(channel_id)
+        # channel_id = cls.check.channel_id(channel_id, cls)
+        # channel_url = channel_id_to_url(channel_id)
         try:
             online = pytube.Channel(channel_url)
             if progress_bar:
@@ -116,7 +114,7 @@ class Channel:
                 channel_contents = online.url_generator()
             video_ids = [video_url_to_id(url) for url in channel_contents]
             return cls(source="pytube",
-                       channel_id=channel_id,
+                       channel_id=channel_url_to_id(channel_url),
                        channel_name=online.channel_name,
                        last_updated=datetime.now(),
                        about_html=online.about_html,
@@ -144,7 +142,7 @@ class Channel:
         if self.workers and self.workers == 1:
             if self.source == "local":
                 for video_id in self.video_ids:
-                    yield Video.from_local(video_id)
+                    yield Video.from_local(self.info["channel_id"], video_id)
             elif self.source == "pytube":
                 for video_id in self.video_ids:
                     yield Video.from_pytube(video_id)
@@ -152,7 +150,87 @@ class Channel:
                 for video_id in self.video_ids:
                     yield Video.from_sql(video_id)
         else:  # multithreading
-            raise NotImplementedError()
+            with ThreadPoolExecutor(max_workers=self.workers) as executor:
+                try:
+                    if self.source == "local":
+                        def dispatch(v_id):
+                            return executor.submit(Video.from_local,
+                                                   self.info["channel_id"],
+                                                   v_id)
+                        futures = [dispatch(v_id) for v_id in self.video_ids]
+                    elif self.source == "pytube":
+                        def dispatch(v_id):
+                            return executor.submit(Video.from_pytube, v_id)
+                        futures = [dispatch(v_id) for v_id in self.video_ids]
+                    elif self.source == "sql":
+                        def dispatch(v_id):
+                            return executor.submit(Video.from_sql, v_id)
+                        futures = [dispatch(v_id) for v_id in self.video_ids]
+                    for future in as_completed(futures):
+                        yield future.result()
+                except (KeyboardInterrupt, SystemExit) as exc:
+                    executor.shutdown(cancel_futures=True)
+                    raise exc
+
+    def to_json(self, json_path: Path | None = None) -> dict[str, str]:
+        result = self.info.copy()
+        result["last_updated"] = result["last_updated"].isoformat()
+        if json_path:
+            if not isinstance(json_path, Path):
+                err_msg = (f"[{error_trace(self)}] if provided, `json_path` "
+                           f"must be a Path-like object describing where to "
+                           f"save the json dictionary")
+                raise TypeError(err_msg)
+            if json_path.suffix != ".json":
+                err_msg = (f"[{error_trace(self)}] `json_path` must end with "
+                           f"must end with '.json' extension: {json_path}")
+                raise ValueError(err_msg)
+            with json_path.open("w") as json_file:
+                json_path.parent.mkdir(exist_ok=True)
+                json.dump(result, json_file)
+        return result
+
+
+    def __eq__(self, other: Channel) -> bool:
+        return (self.info["channel_id"] == other.info["channel_id"] and
+                self.info["last_updated"] == other.info["last_updated"])
+
+    def __len__(self) -> int:
+        return len(self.video_ids)
+
+    def __repr__(self) -> str:
+        def crop_ids(id_list: list[str], threshold: int = 5) -> str:
+            if len(id_list) > threshold:
+                formatted = "', '".join(id_list[:threshold])
+                return f"['{formatted}', ...]"
+            return repr(id_list)
+
+        def crop_html(html_response: str, threshold: int = 16) -> str:
+            if len(html_response) > threshold:
+                return f"'{html_response[:threshold]}...'"
+            return repr(html_response)
+
+        prop_dict = {
+            "source": repr(self.source),
+            "channel_id": repr(self.info["channel_id"]),
+            "channel_name": repr(self.info["channel_name"]),
+            "video_ids": crop_ids(self.video_ids),
+            "last_updated": repr(self.info.last_updated),
+            "about_html": crop_html(self.info["about_html"]),
+            "community_html": crop_html(self.info["community_html"]),
+            "featured_channels_html": crop_html(
+                self.info["featured_channels_html"]),
+            "videos_html": crop_html(self.info["videos_html"]),
+            "workers": repr(self.workers),
+            "parent_dir": repr(self.target_dir)
+        }
+        chained = [f"{k}={v}" for k, v in prop_dict.items()]
+        return f"Channel({', '.join(chained)})"
+
+    def __str__(self) -> str:
+        return (f"[{self.info['last_updated']}] {self.info['channel_name']} "
+                f"({self.__len__()})")
+
 
     class check:
 
@@ -172,12 +250,13 @@ class Channel:
         @staticmethod
         def channel_id(channel_id: str, *objs) -> str:
             err_msg = (f"[{error_trace(*objs, stack_index=2)}] `channel_id` "
-                       f"must be a unique 24-character channel id used by the "
-                       f"YouTube backend to track channels")
+                       f"must be a unique 24-character channel id starting "
+                       f"with 'UC', which is used by the YouTube backend to "
+                       f"track channels")
             if not isinstance(channel_id, str):
                 context = (f"(received object of type: {type(channel_id)})")
                 raise TypeError(f"{err_msg} {context}")
-            if len(channel_id) != 24:
+            if len(channel_id) != 24 or not channel_id.startswith("UC"):
                 context = (f"(received: {repr(channel_id)})")
                 raise ValueError(f"{err_msg} {context}")
             return channel_id
@@ -185,39 +264,40 @@ class Channel:
         @staticmethod
         def channel_name(channel_name: str, *objs) -> str:
             err_msg = (f"[{error_trace(*objs, stack_index=2)}] `channel_name` "
-                       f"must be a string")
+                       f"must be a non-empty string")
             if not isinstance(channel_name, str):
                 context = f"(received object of type: {type(channel_name)})"
                 raise TypeError(f"{err_msg} {context}")
+            if not channel_name:  # channel_name is empty string
+                context = f"(received: {repr(channel_name)})"
+                raise ValueError(f"{err_msg} {context}")
             return channel_name
 
         @staticmethod
         def video_ids(video_ids: list[str] | tuple[str],
-                            *objs) -> list[str]:
-            err_msg = (f"[{error_trace(*objs, stack_index=2)}] `video_ids` "
-                       f"must be a list or tuple of unique 11-character video "
-                       f"ids referencing the video contents of this channel")
+                      *objs,
+                      stack_index: int = 2) -> list[str]:
+            err_msg = (f"[{error_trace(*objs, stack_index=stack_index)}] "
+                       f"`video_ids` must be a list or tuple of unique "
+                       f"11-character video ids referencing the video "
+                       f"contents of this channel")
             if not isinstance(video_ids, (list, tuple)):
                 context = f"(received object of type: {type(video_ids)})"
                 raise TypeError(f"{err_msg} {context}")
-            if any(not isinstance(v, str) or len(v) != 11 for v in video_ids):
-                if len(video_ids) > 6:  # only show head
-                    context = f"(received: [{', '.join(video_ids[:6])}, ...])"
-                else:
-                    context = f"(received: [{', '.join(video_ids)}])"
-                raise ValueError(f"{err_msg} {context}")
+            for v_id in video_ids:
+                Video.check.video_id(v_id, *objs, stack_index=stack_index + 1)
             return list(video_ids)
 
         @staticmethod
         def last_updated(last_updated: datetime, *objs) -> datetime:
             err_msg = (f"[{error_trace(*objs, stack_index=2)}] `last_updated` "
-                       f"must be a datetime object stating the last time this "
-                       f"channel was checked for updates")
+                       f"must be a datetime.datetime object stating the last "
+                       f"time this channel was checked for updates")
             if not isinstance(last_updated, datetime):
-                context = f"(received object of type: {type(last_updated)}"
+                context = f"(received object of type: {type(last_updated)})"
                 raise TypeError(f"{err_msg} {context}")
             if last_updated > datetime.now():
-                context = f"('{str(last_updated)}' > '{str(datetime.now())}')"
+                context = f"({last_updated} > {datetime.now()})"
                 raise ValueError(f"{err_msg} {context}")
             return last_updated
 
@@ -227,7 +307,7 @@ class Channel:
                        f"must be a string containing the html response of the "
                        f"channel's 'About' page, or None if it does not have "
                        f"one")
-            if about_html:
+            if about_html is not None:
                 if not isinstance(about_html, str):
                     context = f"(received object of type: {type(about_html)})"
                     raise TypeError(f"{err_msg} {context}")
@@ -236,11 +316,11 @@ class Channel:
 
         @staticmethod
         def community_html(community_html: str | None, *objs) -> str:
-            err_msg = (f"[{error_trace(*objs, stack_index=2)}] `community_html` "
-                       f"must be a string containing the html response of the "
-                       f"channel's 'Community' page, or None if it does not "
-                       f"have one")
-            if community_html:
+            err_msg = (f"[{error_trace(*objs, stack_index=2)}] "
+                       f"`community_html` must be a string containing the "
+                       f"html response of the channel's 'Community' page, or "
+                       f"None if it does not have one")
+            if community_html is not None:
                 if not isinstance(community_html, str):
                     context = (f"(received object of type: "
                                 f"{type(community_html)})")
@@ -255,7 +335,7 @@ class Channel:
                        f"`featured_channels_html` must be a string containing "
                        f"the html response of the channel's 'Featured "
                        f"Channels' page, or None if it does not have one")
-            if featured_channels_html:
+            if featured_channels_html is not None:
                 if not isinstance(featured_channels_html, str):
                     context = (f"(received object of type: "
                                 f"{type(featured_channels_html)})")
@@ -269,7 +349,7 @@ class Channel:
                        f"must be a string containing the html response of the "
                        f"channel's 'Videos' page, or None if it does not have "
                        f"one")
-            if videos_html:
+            if videos_html is not None:
                 if not isinstance(videos_html, str):
                     context = f"(received object of type: {type(videos_html)})"
                     raise TypeError(f"{err_msg} {context}")
@@ -279,9 +359,9 @@ class Channel:
         @staticmethod
         def workers(workers: int | None, *objs) -> int:
             err_msg = (f"[{error_trace(*objs, stack_index=2)}] `workers` must "
-                       f"be an integer > 0 or None to use all available "
+                       f"be an integer > 0, or None to use all available "
                        f"resources")
-            if workers:
+            if workers is not None:
                 if not isinstance(workers, int):
                     context = f"(received object of type: {type(workers)})"
                     raise TypeError(f"{err_msg} {context}")
@@ -293,15 +373,15 @@ class Channel:
         @staticmethod
         def parent_dir(parent_dir: Path | None, *objs) -> Path:
             err_msg = (f"[{error_trace(*objs, stack_index=2)}] `parent_dir` "
-                       f"must be a Path-like pointing to a directory on local "
-                       f"storage to load/download content to, or None to use "
-                       f"the default directory structure")
-            if parent_dir:
+                       f"must be a Path-like object pointing to a directory "
+                       f"on local storage to load/download content to, or "
+                       f"None to use the default directory structure")
+            if parent_dir is not None:
                 if not isinstance(parent_dir, Path):
                     context = f"(received object of type: {type(parent_dir)})"
                     raise TypeError(f"{err_msg} {context}")
-                if not parent_dir.exists():
-                    context = f"('{parent_dir}' does not exist)"
+                if not parent_dir.is_dir():  # is_dir = False if does not exist
+                    context = f"(directory does not exist: {parent_dir})"
                     raise ValueError(f"{err_msg} {context}")
                 return parent_dir
             return VIDEO_DIR
@@ -429,6 +509,10 @@ class Video:
             raise RuntimeError(err_msg) from exc
 
 
+    def to_json(self, json_path: Path = None) -> dict[str, str]:
+        pass
+
+
     class check:
 
         @staticmethod
@@ -444,10 +528,10 @@ class Video:
             return Channel.check.channel_name(channel_name, *objs)
 
         @staticmethod
-        def video_id(video_id: str, *objs) -> str:
-            err_msg = (f"[{error_trace(*objs, stack_index=2)}] `video_id` "
-                       f"must be a unique 11-character video id used by the "
-                       f"YouTube backend to track videos")
+        def video_id(video_id: str, *objs, stack_index: int = 2) -> str:
+            err_msg = (f"[{error_trace(*objs, stack_index=stack_index)}] "
+                       f"`video_id` must be a unique 11-character video id "
+                       f"used by the YouTube backend to track videos")
             if not isinstance(video_id, str):
                 context = f"(received object of type: {type(video_id)})"
                 raise TypeError(f"{err_msg} {context}")
