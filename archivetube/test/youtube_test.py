@@ -1,262 +1,13 @@
 from datetime import datetime
+import json
 from pathlib import Path
 import unittest
 
-from archivetube import VIDEO_DIR
+from archivetube import ROOT_DIR, VIDEO_DIR
 from archivetube.youtube import Channel, channel_id_to_url
 
 
 TEST_CHANNEL_ID = "UCBR8-60-B28hp2BmDPdntcQ"  # YouTube official
-
-
-class ChannelParameterCheckTests(unittest.TestCase):
-
-    def test_check_source(self):
-        # good sources
-        for source in ["local", "pytube", "sql"]:
-            Channel.check.source(source)
-
-        # bad source type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.source(123)
-        err_msg = ("[test_check_source] `source` must be a string with one "
-                   "of the following values: ('local', 'pytube', 'sql') "
-                   "(received object of type: <class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # bad source value
-        with self.assertRaises(ValueError) as err:
-            Channel.check.source("bad source value")
-        err_msg = ("[test_check_source] `source` must be a string with one "
-                   "of the following values: ('local', 'pytube', 'sql') "
-                   "(received: 'bad source value')")
-        self.assertEqual(str(err.exception), err_msg)
-
-    def test_check_channel_id(self):
-        # good channel id
-        Channel.check.channel_id(TEST_CHANNEL_ID)
-
-        # bad channel id type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.channel_id(123)
-        err_msg = ("[test_check_channel_id] `channel_id` must be a unique "
-                   "24-character channel id starting with 'UC', which is used "
-                   "by the YouTube backend to track channels (received object "
-                   "of type: <class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # bad channel id length
-        with self.assertRaises(ValueError) as err:
-            Channel.check.channel_id(TEST_CHANNEL_ID[:-2])
-        err_msg = (f"[test_check_channel_id] `channel_id` must be a unique "
-                   f"24-character channel id starting with 'UC', which is used "
-                   f"by the YouTube backend to track channels (received: "
-                   f"{repr(TEST_CHANNEL_ID[:-2])})")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # channel id doesn't start with 'UC'
-        bad_start = f"XX{TEST_CHANNEL_ID[2:]}"
-        with self.assertRaises(ValueError) as err:
-            Channel.check.channel_id(bad_start)
-        err_msg = (f"[test_check_channel_id] `channel_id` must be a unique "
-                   f"24-character channel id starting with 'UC', which is used "
-                   f"by the YouTube backend to track channels (received: "
-                   f"{repr(bad_start)})")
-        self.assertEqual(str(err.exception), err_msg)
-
-    def test_check_channel_name(self):
-        # good channel name
-        Channel.check.channel_name("YouTube")
-
-        # bad channel name type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.channel_name(123)
-        err_msg = ("[test_check_channel_name] `channel_name` must be a "
-                   "non-empty string (received object of type: <class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # empty channel name
-        with self.assertRaises(ValueError) as err:
-            Channel.check.channel_name("")
-        err_msg = ("[test_check_channel_name] `channel_name` must be a "
-                   "non-empty string (received: '')")
-        self.assertEqual(str(err.exception), err_msg)
-
-    def test_check_video_ids(self):
-        # good ids
-        test_ids = ["NeOBvwRfBWc", "QltYNmVUvh0", "SYQJPkiNJfE", "3WSmP7i9my8",
-                    "TBuNVQ54dgg"]  # taken from official YouTube channel
-        Channel.check.video_ids(test_ids)
-
-        # bad id type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.video_ids(set(test_ids))
-        err_msg = ("[test_check_video_ids] `video_ids` must be a list or "
-                   "tuple of unique 11-character video ids referencing the "
-                   "video contents of this channel (received object of type: "
-                   "<class 'set'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # bad id type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.video_ids(test_ids + [123])
-        err_msg = ("[test_check_video_ids] `video_id` must be a unique "
-                   "11-character video id used by the YouTube backend to "
-                   "track videos (received object of type: <class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # bad id length
-        with self.assertRaises(ValueError) as err:
-            Channel.check.video_ids(test_ids + ["not11characters"])
-        err_msg = ("[test_check_video_ids] `video_id` must be a unique "
-                   "11-character video id used by the YouTube backend to "
-                   "track videos (received: 'not11characters')")
-        self.assertEqual(str(err.exception), err_msg)
-                
-    def test_check_last_updated(self):
-        # good timestamp
-        Channel.check.last_updated(datetime.now())
-
-        # bad type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.last_updated(123)
-        err_msg = ("[test_check_last_updated] `last_updated` must be a "
-                   "datetime.datetime object stating the last time this "
-                   "channel was checked for updates (received object of type: "
-                   "<class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # in the future
-        with self.assertRaises(ValueError) as err:
-            Channel.check.last_updated(datetime(9999, 12, 31))
-        err_msg = (f"[test_check_last_updated] `last_updated` must be a "
-                   f"datetime.datetime object stating the last time this "
-                   f"channel was checked for updates "
-                   f"({datetime(9999, 12, 31)} > ")
-        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
-
-    def test_check_about_html(self):
-        # good html
-        Channel.check.about_html("some ridiculously long html code")
-
-        # bad type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.about_html(123)
-        err_msg = ("[test_check_about_html] `about_html` must be a string "
-                   "containing the html response of the channel's 'About' "
-                   "page, or None if it does not have one (received object "
-                   "of type: <class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # None
-        self.assertEqual(Channel.check.about_html(None), "")
-
-    def test_check_community_html(self):
-        # good html
-        Channel.check.community_html("some ridiculously long html code")
-
-        # bad type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.community_html(123)
-        err_msg = ("[test_check_community_html] `community_html` must be a "
-                   "string containing the html response of the channel's "
-                   "'Community' page, or None if it does not have one "
-                   "(received object of type: <class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # None
-        self.assertEqual(Channel.check.community_html(None), "")
-
-    def test_check_featured_channels_html(self):
-        # good html
-        Channel.check.featured_channels_html("some ridiculously long html code")
-
-        # bad type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.featured_channels_html(123)
-        err_msg = ("[test_check_featured_channels_html] "
-                   "`featured_channels_html` must be a string containing the "
-                   "html response of the channel's 'Featured Channels' page, "
-                   "or None if it does not have one (received object of type: "
-                   "<class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # None
-        self.assertEqual(Channel.check.featured_channels_html(None), "")
-
-    def test_check_videos_html(self):
-        # good html
-        Channel.check.videos_html("some ridiculously long html code")
-
-        # bad type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.videos_html(123)
-        err_msg = ("[test_check_videos_html] `videos_html` must be a string "
-                   "containing the html response of the channel's 'Videos' "
-                   "page, or None if it does not have one (received object "
-                   "of type: <class 'int'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # None
-        self.assertEqual(Channel.check.videos_html(None), "")
-
-    def test_check_workers(self):
-        # good workers
-        Channel.check.workers(1)
-
-        # bad type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.workers(1.5)
-        err_msg = ("[test_check_workers] `workers` must be an integer > 0, "
-                   "or None to use all available resources (received object "
-                   "of type: <class 'float'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # < 1
-        with self.assertRaises(ValueError) as err:
-            Channel.check.workers(0)
-        err_msg = ("[test_check_workers] `workers` must be an integer > 0, "
-                   "or None to use all available resources (received: 0)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # None
-        self.assertIsNone(Channel.check.workers(None))
-
-    def test_check_parent_dir(self):
-        # good dir
-        Channel.check.parent_dir(Path(__file__).resolve().parent)
-
-        # bad type
-        with self.assertRaises(TypeError) as err:
-            Channel.check.parent_dir("abc")
-        err_msg = ("[test_check_parent_dir] `parent_dir` must be a Path-like "
-                   "object pointing to a directory on local storage to "
-                   "load/download content to, or None to use the default "
-                   "directory structure (received object of type: "
-                   "<class 'str'>)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # does not exist
-        with self.assertRaises(ValueError) as err:
-            Channel.check.parent_dir(Path("does_not_exist"))
-        err_msg = ("[test_check_parent_dir] `parent_dir` must be a Path-like "
-                   "object pointing to a directory on local storage to "
-                   "load/download content to, or None to use the default "
-                   "directory structure (directory does not exist: "
-                   "does_not_exist)")
-        self.assertEqual(str(err.exception), err_msg)
-
-        # points to file
-        with self.assertRaises(ValueError) as err:
-            Channel.check.parent_dir(Path(__file__))
-        err_msg = ("[test_check_parent_dir] `parent_dir` must be a Path-like "
-                   "object pointing to a directory on local storage to "
-                   "load/download content to, or None to use the default "
-                   "directory structure (directory does not exist: ")
-        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
-
-        # None
-        self.assertEqual(Channel.check.parent_dir(None), VIDEO_DIR)
 
 
 class BasicChannelTests(unittest.TestCase):
@@ -270,95 +21,234 @@ class BasicChannelTests(unittest.TestCase):
                       "TBuNVQ54dgg"],  # taken from official YouTube channel,
         "last_updated": current_time,
         "about_html": "",
-        "community_html": None,
+        "community_html": "",
         "featured_channels_html": "",
-        "videos_html": None,
+        "videos_html": "",
         "workers": 1,
-        "parent_dir": VIDEO_DIR
+        "target_dir": Path(ROOT_DIR, "archivetube", "test", "test_channels",
+                           TEST_CHANNEL_ID)
     }
 
     def test_init_good_input(self):
         c = Channel(**self.properties)
         self.assertEqual(c.source, "local")
-        self.assertEqual(c.info["channel_id"], TEST_CHANNEL_ID)
-        self.assertEqual(c.info["channel_name"], "YouTube")
+        self.assertEqual(c.id, TEST_CHANNEL_ID)
+        self.assertEqual(c.name, "YouTube")
         self.assertEqual(c.video_ids, ["NeOBvwRfBWc", "QltYNmVUvh0",
                                        "SYQJPkiNJfE", "3WSmP7i9my8",
                                        "TBuNVQ54dgg"]),
-        self.assertEqual(c.info["last_updated"], self.current_time)
-        self.assertEqual(c.info["about_html"], "")
-        self.assertEqual(c.info["community_html"], "")
-        self.assertEqual(c.info["featured_channels_html"], "")
-        self.assertEqual(c.info["videos_html"], "")
+        self.assertEqual(c.last_updated, self.current_time)
+        self.assertEqual(c.html["about"], "")
+        self.assertEqual(c.html["community"], "")
+        self.assertEqual(c.html["featured_channels"], "")
+        self.assertEqual(c.html["videos"], "")
         self.assertEqual(c.workers, 1)
-        self.assertEqual(c.target_dir, Path(VIDEO_DIR, c.info["channel_id"]))
+        self.assertEqual(c.target_dir, self.properties["target_dir"])
 
-    def test_init_bad_input(self):
-        # bad source
-        with self.assertRaises(TypeError):
+    def test_source_errors(self):
+        # bad source type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "source": 123})
-        with self.assertRaises(ValueError):
-            Channel(**{**self.properties, "source": "bad source type"})
+        err_msg = ("[Channel.source] `source` must be a string with one of "
+                   "the following values: ('local', 'pytube', 'sql') "
+                   "(received object of type: <class 'int'>)")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad channel_id
-        with self.assertRaises(TypeError):
+        # bad source value
+        with self.assertRaises(ValueError) as err:
+            Channel(**{**self.properties, "source": "bad source value"})
+        err_msg = ("[Channel.source] `source` must be a string with one of "
+                   "the following values: ('local', 'pytube', 'sql') "
+                   "(received: 'bad source value')")
+        self.assertEqual(str(err.exception), err_msg)
+
+    def test_channel_id_errors(self):
+        # bad channel id type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "channel_id": 123})
-        with self.assertRaises(ValueError):
+        err_msg = ("[Channel.id] `id` must be a unique 24-character "
+                   "ExternalId starting with 'UC', which is used by the "
+                   "YouTube backend to track channels (received object of "
+                   "type: <class 'int'>)")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # bad channel id length
+        with self.assertRaises(ValueError) as err:
             Channel(**{**self.properties, "channel_id": TEST_CHANNEL_ID[:-2]})
-        with self.assertRaises(ValueError):
-            Channel(**{**self.properties,
-                       "channel_id": f"XX{TEST_CHANNEL_ID[2:]}"})
+        err_msg = (f"[Channel.id] `id` must be a unique 24-character "
+                   f"ExternalId starting with 'UC', which is used by the "
+                   f"YouTube backend to track channels (received: "
+                   f"{repr(TEST_CHANNEL_ID[:-2])})")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad channel_name
-        with self.assertRaises(TypeError):
+        # channel id doesn't start with 'UC'
+        bad_start = f"XX{TEST_CHANNEL_ID[2:]}"
+        with self.assertRaises(ValueError) as err:
+            Channel(**{**self.properties, "channel_id": bad_start})
+        err_msg = (f"[Channel.id] `id` must be a unique 24-character "
+                   f"ExternalId starting with 'UC', which is used by the "
+                   f"YouTube backend to track channels (received: "
+                   f"{repr(bad_start)})")
+        self.assertEqual(str(err.exception), err_msg)
+
+    def test_channel_name_errors(self):
+        # bad channel name type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "channel_name": 123})
-        with self.assertRaises(ValueError):
+        err_msg = ("[Channel.name] `name` must be a non-empty string "
+                   "(received object of type: <class 'int'>)")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # empty channel name
+        with self.assertRaises(ValueError) as err:
             Channel(**{**self.properties, "channel_name": ""})
+        err_msg = ("[Channel.name] `name` must be a non-empty string "
+                   "(received: '')")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad video_ids
-        with self.assertRaises(TypeError):
-            Channel(**{**self.properties, "video_ids": set()})
-        with self.assertRaises(TypeError):
-            Channel(**{**self.properties, "video_ids": [123]})
-        with self.assertRaises(ValueError):
-            Channel(**{**self.properties, "video_ids": ["not11characters"]})
-
-        # bad last_updated
-        with self.assertRaises(TypeError):
+    def test_last_updated_errors(self):
+        # bad type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "last_updated": 123})
-        with self.assertRaises(ValueError):
+        err_msg = ("[Channel.last_updated] `last_updated` must be a "
+                   "datetime.datetime object stating the last time this "
+                   "channel was checked for updates (received object of type: "
+                   "<class 'int'>)")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # in the future
+        with self.assertRaises(ValueError) as err:
             Channel(**{**self.properties,
                        "last_updated": datetime(9999, 12, 31)})
+        err_msg = (f"[Channel.last_updated] `last_updated` must be a "
+                   f"datetime.datetime object stating the last time this "
+                   f"channel was checked for updates "
+                   f"({datetime(9999, 12, 31)} > ")
+        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
-        # bad about_html
-        with self.assertRaises(TypeError):
+    def test_video_ids_errors(self):
+        test_ids = self.properties["video_ids"]
+
+        # bad id type
+        with self.assertRaises(TypeError) as err:
+            Channel(**{**self.properties, "video_ids": str(test_ids)})
+        err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
+                   "set of unique 11-character video id strings referencing "
+                   "the video contents of this channel (received object of "
+                   "type: <class 'str'>)")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # bad id type
+        with self.assertRaises(TypeError) as err:
+            Channel(**{**self.properties, "video_ids": test_ids + [123]})
+        err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
+                   "set of unique 11-character video id strings referencing "
+                   "the video contents of this channel (received video id of "
+                   "type: <class 'int'>)")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # bad id length
+        with self.assertRaises(ValueError) as err:
+            Channel(**{**self.properties,
+                       "video_ids": test_ids + ["not11characters"]})
+        err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
+                   "set of unique 11-character video id strings referencing "
+                   "the video contents of this channel (received malformed "
+                   "video id: 'not11characters')")
+        self.assertEqual(str(err.exception), err_msg)
+
+    def test_about_html_errors(self):
+        # bad type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "about_html": 123})
+        err_msg = ("[Channel.html] `html` must be a registry of raw html "
+                   "response strings for the current channel (received value "
+                   "of type: <class 'int'> for key: 'about')")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad community_html
-        with self.assertRaises(TypeError):
+    def test_community_html_errors(self):
+        # bad type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "community_html": 123})
+        err_msg = ("[Channel.html] `html` must be a registry of raw html "
+                   "response strings for the current channel (received value "
+                   "of type: <class 'int'> for key: 'community')")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad featured_channels_html
-        with self.assertRaises(TypeError):
+    def test_featured_channels_html_errors(self):
+        # bad type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "featured_channels_html": 123})
+        err_msg = ("[Channel.html] `html` must be a registry of raw html "
+                   "response strings for the current channel (received value "
+                   "of type: <class 'int'> for key: 'featured_channels')")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad videos_html
-        with self.assertRaises(TypeError):
+    def test_videos_html_errors(self):
+        # bad type
+        with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "videos_html": 123})
+        err_msg = ("[Channel.html] `html` must be a registry of raw html "
+                   "response strings for the current channel (received value "
+                   "of type: <class 'int'> for key: 'videos')")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad workers
-        with self.assertRaises(TypeError):
-            Channel(**{**self.properties, "workers": "abc"})
-        with self.assertRaises(ValueError):
+    def test_workers_errors(self):
+        # bad type
+        with self.assertRaises(TypeError) as err:
+            Channel(**{**self.properties, "workers": 1.5})
+        err_msg = ("[Channel.workers] `workers` must be an integer > 0 or "
+                   "None to use all available resources (received object of "
+                   "type: <class 'float'>)")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # < 1
+        with self.assertRaises(ValueError) as err:
             Channel(**{**self.properties, "workers": 0})
+        err_msg = ("[Channel.workers] `workers` must be an integer > 0 or "
+                   "None to use all available resources (received: 0)")
+        self.assertEqual(str(err.exception), err_msg)
 
-        # bad parent_dir
-        with self.assertRaises(TypeError):
-            Channel(**{**self.properties, "parent_dir": "abc"})
-        with self.assertRaises(ValueError):
-            Channel(**{**self.properties, "parent_dir": Path("does_not_exist")})
-        with self.assertRaises(ValueError):
-            Channel(**{**self.properties, "parent_dir": Path(__file__)})
+    def test_target_dir_errors(self):
+        # bad type
+        with self.assertRaises(TypeError) as err:
+            Channel(**{**self.properties, "target_dir": "abc"})
+        err_msg = ("[Channel.target_dir] `target_dir` must be a Path-like "
+                   "object pointing to a directory on local storage in which "
+                   "to store the contents of this channel (received object of "
+                   "type: <class 'str'>)")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # points to file
+        with self.assertRaises(ValueError) as err:
+            Channel(**{**self.properties, "target_dir": Path(__file__)})
+        err_msg = ("[Channel.target_dir] `target_dir` must be a Path-like "
+                   "object pointing to a directory on local storage in which "
+                   "to store the contents of this channel (path points to "
+                   "file: ")
+        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
+
+    def test_to_json(self):
+        c = Channel(**self.properties)
+        json_path = Path(ROOT_DIR, "archivetube", "test", "test_json.json")
+        json_path.unlink(missing_ok=True)
+        json_dict = c.to_json(json_path=json_path)
+        expected = {
+            "channel_id": self.properties["channel_id"],
+            "channel_name": self.properties["channel_name"],
+            "last_updated": self.properties["last_updated"].isoformat(),
+            "html": {
+                "about": self.properties["about_html"],
+                "community": self.properties["community_html"],
+                "featured_channels": self.properties["featured_channels_html"],
+                "videos": self.properties["videos_html"]
+            } 
+        }
+        self.assertEqual(json_dict, expected)
+        self.assertTrue(json_path.exists())
+        with json_path.open("r") as json_file:
+            test_json = json.load(json_file)
+        self.assertEqual(test_json, expected)
 
     def test_length(self):
         c = Channel(**self.properties)
@@ -368,10 +258,10 @@ class BasicChannelTests(unittest.TestCase):
         c1 = Channel(**self.properties)
         c2 = Channel(**self.properties)
         self.assertEqual(c1, c2)
-        c1.info["channel_id"] = "UCuAXFkgsw1L7xaCfnd5JJOw"  # Rick Astley
+        c1.id = "UCuAXFkgsw1L7xaCfnd5JJOw"  # Rick Astley
         self.assertNotEqual(c1, c2)
-        c1.info["channel_id"] = TEST_CHANNEL_ID
-        c1.info["last_updated"] = datetime.now()
+        c1.id = TEST_CHANNEL_ID
+        c1.last_updated = datetime.now()
         self.assertNotEqual(c1, c2)
 
 
