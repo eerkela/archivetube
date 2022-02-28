@@ -5,14 +5,14 @@ import json
 from pathlib import Path
 import re
 from socket import gaierror
-from typing import Iterator, Type
+from typing import Iterator
 from urllib.error import URLError
 
 import pytube
 from tqdm import tqdm
 
-from archivetube import VIDEO_DIR, error_trace
-
+from archivetube import VIDEO_DIR
+from archivetube.error import error_trace
 
 """
 TODO: move checks into getter/setter properties for more pythonic approach
@@ -349,21 +349,26 @@ class Channel:
             with ThreadPoolExecutor(max_workers=self.workers) as executor:
                 try:
                     if self.source == "local":
-                        def dispatch(v_id):
-                            video_path = Path(self.target_dir, v_id)
-                            return executor.submit(Video.from_local, video_path)
+                        def dispatch(video_id):
+                            path = Path(self.target_dir, video_id)
+                            return executor.submit(Video.from_local, path)
                         futures = [dispatch(v_id) for v_id in self.video_ids]
                     elif self.source == "pytube":
-                        def dispatch(v_id):
-                            video_url = video_id_to_url(v_id)
-                            return executor.submit(Video.from_pytube, video_url)
+                        def dispatch(video_id):
+                            url = video_id_to_url(video_id)
+                            return executor.submit(Video.from_pytube, url)
                         futures = [dispatch(v_id) for v_id in self.video_ids]
                     elif self.source == "sql":
-                        def dispatch(v_id):
-                            return executor.submit(Video.from_sql, v_id)
+                        def dispatch(video_id):
+                            return executor.submit(Video.from_sql, video_id)
                         futures = [dispatch(v_id) for v_id in self.video_ids]
                     for future in as_completed(futures):
-                        yield future.result()
+                        exc = future.exception()
+                        if exc is not None:
+                            executor.shutdown(cancel_futures=True)
+                            raise exc
+                        else:
+                            yield future.result()
                 except (KeyboardInterrupt, SystemExit) as exc:
                     print("Received kill signal.  Shutting down threads...")
                     executor.shutdown(cancel_futures=True)
@@ -430,12 +435,13 @@ class Video:
         self.publish_date = publish_date
         self.last_updated = last_updated
         self.duration = duration
-        self.stats = {
+        stats_dict = {
             "views": views,
             "rating": rating,
             "likes": likes,
             "dislikes": dislikes
         }
+        self.stats = {k: v for k, v in stats_dict.items() if v is not None}
         self.description = description
         self.keywords = keywords
         self.thumbnail_url = thumbnail_url
@@ -491,6 +497,8 @@ class Video:
                     target_dir: Path | None = None) -> Video:
         try:
             online = pytube.YouTube(video_url)
+            if channel is None:
+                channel = Channel.from_pytube(online.channel_url)
             return cls(source="local",
                        video_id=video_url_to_id(video_url),
                        video_title=online.title,
@@ -573,7 +581,7 @@ class Video:
                 else:
                     context = (f"(channel does not own this video: "
                                f"{repr(self.id)} not in "
-                               f"{repr(new_channel.video_ids)}")
+                               f"{repr(new_channel.video_ids)})")
                 raise ValueError(f"{err_msg} {context}")
         self._channel = new_channel
 
@@ -639,7 +647,7 @@ class Video:
                 context = f"(received keyword of type: {type(keyword)})"
                 raise TypeError(f"{err_msg} {context}")
             if not keyword:  # keyword is empty string
-                context = f"(recieved empty keyword: {repr(keyword)})"
+                context = f"(received empty keyword: {repr(keyword)})"
                 raise ValueError(f"{err_msg} {context}")
         self._keywords = new_keywords
 
@@ -653,10 +661,10 @@ class Video:
                    f"datetime.datetime object stating the last time this "
                    f"video was checked for updates")
         if not isinstance(new_date, datetime):
-            context = f"(received object of type: {type(new_date)}"
+            context = f"(received object of type: {type(new_date)})"
             raise TypeError(f"{err_msg} {context}")
         if new_date > datetime.now():
-            context = f"('{str(new_date)}' > '{str(datetime.now())}')"
+            context = f"({str(new_date)} > {str(datetime.now())})"
             raise ValueError(f"{err_msg} {context}")
         self._last_updated = new_date
 
@@ -670,10 +678,10 @@ class Video:
                    f"datetime.datetime object stating the last time this "
                    f"video was checked for updates")
         if not isinstance(new_date, datetime):
-            context = f"(received object of type: {type(new_date)}"
+            context = f"(received object of type: {type(new_date)})"
             raise TypeError(f"{err_msg} {context}")
         if new_date > datetime.now():
-            context = f"('{str(new_date)}' > '{str(datetime.now())}')"
+            context = f"({str(new_date)} > {str(datetime.now())})"
             raise ValueError(f"{err_msg} {context}")
         self._publish_date = new_date
 
@@ -706,57 +714,47 @@ class Video:
 
     @stats.setter
     def stats(self, new_stats: dict[str, int | float]) -> None:
-        # TODO: check for existence of views and rating or likes + dislikes
         err_msg = (f"[{error_trace(self)}] `stats` must be a dictionary "
                    f"containing the view and rating statistics of the video")
         if not isinstance(new_stats, dict):
             context = f"(received object of type: {type(new_stats)})"
             raise TypeError(f"{err_msg} {context}")
+        if ("rating" not in new_stats and
+            ("likes" not in new_stats or "dislikes" not in new_stats)):
+            context = ("(not enough information to compute rating: no "
+                       "'rating' entry and no 'likes' and 'dislikes' to "
+                       "compute it)")
+            raise ValueError(f"{err_msg} {context}")
         for k, v in new_stats.items():
             if not isinstance(k, str):
                 context = f"(received non-string key of type: {type(k)})"
                 raise TypeError(f"{err_msg} {context}")
-            if not isinstance(v, (int, float)):
-                context = (f"(received non-numeric value of type: {type(v)} "
-                           f"for key: {repr(k)}")
-                raise TypeError(f"{err_msg} {context}")
-            if k == "views":
-                if not isinstance(v, int):
-                    context = (f"('views' must be an integer, received object "
-                               f"of type: {type(v)})")
+            if k not in {"views", "rating", "likes", "dislikes"}:
+                context = f"(received unexpected key: {repr(k)})"
+                raise ValueError(f"{err_msg} {context}")
+            if k == "rating":
+                if not isinstance(v, (int, float)):
+                    context = (f"('rating' must be an integer or float, "
+                               f"received object of type: {type(v)})")
                     raise TypeError(f"{err_msg} {context}")
-                if v < 0:
-                    context = (f"('views' must be >= 0, received: {v})")
-                    raise ValueError(f"{err_msg} {context}")
-            elif k == "rating":
                 if not 0 <= v <= 5:
                     context = (f"('rating' must be between 0 and 5, received: "
                                f"{v})")
                     raise ValueError(f"{err_msg} {context}")
-            elif k == "likes":
+            elif k in ["views", "likes", "dislikes"]:
                 if not isinstance(v, int):
-                    context = (f"('likes' must be an integer, received object "
-                               f"of type: {type(v)})")
-                    raise TypeError(f"{err_msg} {context}")
-                if v < 0:
-                    context = (f"('likes' must be >= 0, received: {v})")
-                    raise ValueError(f"{err_msg} {context}")
-            elif k == "dislikes":
-                if not isinstance(v, int):
-                    context = (f"('dislikes' must be an integer, received "
+                    context = (f"({repr(k)} must be an integer, received "
                                f"object of type: {type(v)})")
                     raise TypeError(f"{err_msg} {context}")
                 if v < 0:
-                    context = (f"('dislikes' must be >= 0, received: {v})")
+                    context = f"({repr(k)} must be >= 0, received: {v})"
                     raise ValueError(f"{err_msg} {context}")
-        if ("likes" in new_stats and
-            "dislikes" in new_stats and
-            "rating" not in new_stats):
+        if ("rating" not in new_stats and
+            ("likes" in new_stats and "dislikes" in new_stats)):
             likes = new_stats["likes"]
             dislikes = new_stats["dislikes"]
             new_stats["rating"] = 5 * likes / (likes + dislikes)
-        self._stats = {"views": new_stats["views"],
-                       "rating": new_stats["rating"]}
+        self._stats = new_stats
 
     @property
     def streams(self) -> pytube.StreamQuery:
@@ -858,6 +856,3 @@ class Video:
 
     def __eq__(self, other: Video) -> bool:
         return self.id == other.id and self.last_updated == other.last_updated
-
-    def __len__(self) -> timedelta:
-        return self.duration

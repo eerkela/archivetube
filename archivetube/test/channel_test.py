@@ -31,18 +31,17 @@ class BasicChannelTests(unittest.TestCase):
 
     def test_init_good_input(self):
         c = Channel(**self.properties)
-        self.assertEqual(c.source, "local")
-        self.assertEqual(c.id, TEST_CHANNEL_ID)
-        self.assertEqual(c.name, "YouTube")
-        self.assertEqual(c.video_ids, ["NeOBvwRfBWc", "QltYNmVUvh0",
-                                       "SYQJPkiNJfE", "3WSmP7i9my8",
-                                       "TBuNVQ54dgg"]),
-        self.assertEqual(c.last_updated, self.current_time)
-        self.assertEqual(c.html["about"], "")
-        self.assertEqual(c.html["community"], "")
-        self.assertEqual(c.html["featured_channels"], "")
-        self.assertEqual(c.html["videos"], "")
-        self.assertEqual(c.workers, 1)
+        self.assertEqual(c.source, self.properties["source"])
+        self.assertEqual(c.id, self.properties["channel_id"])
+        self.assertEqual(c.name, self.properties["channel_name"])
+        self.assertEqual(c.video_ids, self.properties["video_ids"]),
+        self.assertEqual(c.last_updated, self.properties["last_updated"])
+        self.assertEqual(c.html["about"], self.properties["about_html"])
+        self.assertEqual(c.html["community"], self.properties["community_html"])
+        self.assertEqual(c.html["featured_channels"],
+                         self.properties["featured_channels_html"])
+        self.assertEqual(c.html["videos"], self.properties["videos_html"])
+        self.assertEqual(c.workers, self.properties["workers"])
         self.assertEqual(c.target_dir, self.properties["target_dir"])
 
     def test_source_errors(self):
@@ -222,11 +221,11 @@ class BasicChannelTests(unittest.TestCase):
         # points to file
         with self.assertRaises(ValueError) as err:
             Channel(**{**self.properties, "target_dir": Path(__file__)})
-        err_msg = ("[Channel.target_dir] `target_dir` must be a Path-like "
-                   "object pointing to a directory on local storage in which "
-                   "to store the contents of this channel (path points to "
-                   "file: ")
-        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
+        err_msg = (f"[Channel.target_dir] `target_dir` must be a Path-like "
+                   f"object pointing to a directory on local storage in which "
+                   f"to store the contents of this channel (path points to "
+                   f"file: {Path(__file__)})")
+        self.assertEqual(str(err.exception), err_msg)
 
     def test_to_json(self):
         c = Channel(**self.properties)
