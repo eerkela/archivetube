@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 from socket import gaierror
+import subprocess
 from typing import Iterator
 from urllib.error import URLError
 
@@ -13,17 +14,20 @@ import pytube
 from tqdm import tqdm
 import validators
 
-from archivetube import VIDEO_DIR
+from archivetube import ARCHIVETUBE_VERSION_NUMBER, VIDEO_DIR
 from archivetube.error import error_trace
 
 
 """
 TODO: write an automatic retry method using expressvpn
-TODO: video_ids, convert to paths/urls when needed
 """
 
 
 AVAILABLE_SOURCES = ("local", "pytube", "sql")
+
+
+def is_channel_id(string: str) -> bool:
+    return len(string) == 24 and string.startswith("UC")
 
 
 def is_readable(path: Path) -> bool:
@@ -35,10 +39,6 @@ def is_url(string: str) -> bool:
     if isinstance(result, validators.ValidationFailure):
         return False
     return True
-
-
-def is_channel_id(string: str) -> bool:
-    return len(string) == 24 and string.startswith("UC")
 
 
 def is_video_id(string: str) -> bool:
@@ -94,7 +94,7 @@ class Channel:
     #############################
 
     @classmethod
-    @lru_cache
+    @lru_cache(maxsize=32)
     def from_local(cls, channel_path: Path) -> Channel:
         if not isinstance(channel_path, Path):
             err_msg = (f"[{error_trace(cls)}] `channel_path` must be a "
@@ -122,7 +122,7 @@ class Channel:
                    videos_html=saved["videos_html"])
 
     @classmethod
-    @lru_cache
+    @lru_cache(maxsize=32)
     def from_pytube(cls, channel_url: str) -> Channel:
         if not isinstance(channel_url, str):
             err_msg = (f"[{error_trace(cls)}] `channel_url` must be a string "
@@ -230,7 +230,6 @@ class Channel:
             raise ValueError(f"{err_msg} {context}")
         self._last_updated = new_timestamp
 
-
     @property
     def name(self) -> str:
         return self._name
@@ -326,8 +325,48 @@ class Channel:
     ####    METHODS    ####
     #######################
 
+    def download(
+        self,
+        to: Path | None = None,
+        date_range: tuple[datetime | None, datetime | None] = (None, None),
+        **kwargs
+    ) -> None:
+        def in_date_range(video: Video) -> bool:
+            min_date, max_date = date_range
+            if min_date is not None and max_date is not None:
+                return min_date <= video.publish_date <= max_date
+            if min_date is not None:
+                return min_date <= video.publish_date
+            if max_date is not None:
+                return video.publish_date <= max_date
+            return True
+
+        def dispatch(video, executor=None):
+            if executor is None:
+                return video.download(**kwargs)
+            return executor.submit(video.download, **kwargs)
+
+        if to is not None:
+            self.target_dir = to
+        if self.workers is not None and self.workers == 1:
+            for video in self.__iter__():
+                if in_date_range(video):
+                    dispatch(video)
+        else:
+            with ThreadPoolExecutor(max_workers=self.workers) as executor:
+                try:
+                    futures = []
+                    for video in self.__iter__():
+                        if in_date_range(video):
+                            futures.append(dispatch(video))
+                except (KeyboardInterrupt, SystemExit) as exc:
+                    print("Received kill signal.  Shutting down threads...")
+                    executor.shutdown(cancel_futures=True)
+                    raise exc
+
     def to_json(self, json_path: Path | None = None) -> dict[str, str]:
         result = {
+            "archivetube_version": ARCHIVETUBE_VERSION_NUMBER,
             "channel_id": self.id,
             "channel_name": self.name,
             "last_updated": self.last_updated.isoformat(),
@@ -352,62 +391,52 @@ class Channel:
     ####    DUNDER/MAGIC METHODS    ####
     ####################################
 
-    def __contains__(self, video: Video) -> bool:
+    def __contains__(self, video: Video | str) -> bool:
+        if isinstance(video, str):
+            return video in self.video_ids
         return video.id in self.video_ids
 
     def __eq__(self, other: Channel) -> bool:
         return self.id == other.id and self.last_updated == other.last_updated
 
+    def __hash__(self) -> int:
+        return hash(id(self))
+
     def __iter__(self) -> Iterator[Video]:
+        # define dispatch functions
+        if self.source == "local":
+            def dispatch(video_id, executor=None):
+                path = Path(self.target_dir, video_id)
+                if executor is None:
+                    return Video.from_local(path, channel=self)
+                return executor.submit(Video.from_local, path, channel=self)
+        elif self.source == "pytube":
+            def dispatch(video_id, executor=None):
+                url = video_id_to_url(video_id)
+                if executor is None:
+                    return Video.from_pytube(url, channel=self)
+                return executor.submit(Video.from_pytube, url, channel=self)
+        elif self.source == "sql":
+            def dispatch(video_id, executor=None):
+                if executor is None:
+                    return Video.from_sql(video_id, channel=self)
+                return executor.submit(Video.from_sql, video_id, channel=self)
+
+        # perform iteration
         if self.workers is not None and self.workers == 1:
-            if self.source == "local":
-                for v_id in self.video_ids:
-                    try:
-                        path = Path(self.target_dir, v_id)
-                        yield Video.from_local(path, self)
-                    except (KeyboardInterrupt, SystemExit):
-                        raise
-                    except Exception as exc:
-                        print(exc)
-                        continue
-            elif self.source == "pytube":
-                for v_id in self.video_ids:
-                    try:
-                        url = video_id_to_url(v_id)
-                        yield Video.from_pytube(url, self)
-                    except (KeyboardInterrupt, SystemExit):
-                        raise
-                    except Exception as exc:
-                        print(exc)
-                        continue
-            elif self.source == "sql":
-                for v_id in self.video_ids:
-                    try:
-                        yield Video.from_sql(v_id, self)
-                    except (KeyboardInterrupt, SystemExit):
-                        raise
-                    except Exception as exc:
-                        print(exc)
-                        continue
-        else:  # multithreading
+            for v_id in self.video_ids:
+                try:
+                    yield dispatch(v_id)
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except Exception as exc:
+                    print(exc)
+                    continue
+        else:
             with ThreadPoolExecutor(max_workers=self.workers) as executor:
                 try:
-                    futures = []
-                    if self.source == "local":
-                        for v_id in self.video_ids:
-                            path = Path(self.target_dir, v_id)
-                            f = executor.submit(Video.from_local, path, self)
-                            futures.append(f)
-                    elif self.source == "pytube":
-                        for v_id in self.video_ids:
-                            url = video_id_to_url(v_id)
-                            f = executor.submit(Video.from_pytube, url, self)
-                            futures.append(f)
-                    elif self.source == "sql":
-                        for v_id in self.video_ids:
-                            f = executor.submit(Video.from_sql, v_id, self)
-                            futures.append(f)
-                    for future in as_completed(futures):
+                    fs = [dispatch(v_id, executor) for v_id in self.video_ids]
+                    for future in as_completed(fs):
                         exc = future.exception()
                         if exc is not None:
                             print(exc)
@@ -504,7 +533,7 @@ class Video:
     #############################
 
     @classmethod
-    @lru_cache
+    @lru_cache(maxsize=256)
     def from_local(cls,
                    video_path: Path,
                    channel: Channel | None = None) -> Video:
@@ -519,50 +548,76 @@ class Video:
                        f"(does not exist, is not a directory, or has no "
                        f"info.json file): {video_path}")
             raise ValueError(err_msg)
+        if channel is not None and not isinstance(channel, Channel):
+            err_msg = (f"[{error_trace(cls)}] `channel` must be an instance "
+                       f"of Channel (received object of type: {type(channel)})")
+            raise TypeError(err_msg)
         with Path(video_path, "info.json").open("r") as info_file:
             saved = json.load(info_file)
-        return cls(source="local",
-                   video_id=saved["id"],
-                   video_title=saved["title"],
-                   publish_date=datetime.fromisoformat(saved["publish_date"]),
-                   last_updated=datetime.fromisoformat(saved["fetched_at"]),
-                   duration=timedelta(seconds=saved["length"]),
-                   views=saved["views"],
-                   rating=saved["rating"],
-                   likes=None,
-                   dislikes=None,
-                   description=saved["description"],
-                   keywords=saved["keywords"],
-                   thumbnail_url=saved["thumbnail_url"],
-                   target_dir=video_path,
-                   streams=None,
-                   captions=None,
-                   channel=channel)
+        result = cls(source="local",
+                     video_id=saved["id"],
+                     video_title=saved["title"],
+                     publish_date=datetime.fromisoformat(saved["publish_date"]),
+                     last_updated=datetime.fromisoformat(saved["fetched_at"]),
+                     duration=timedelta(seconds=saved["length"]),
+                     views=saved["views"],
+                     rating=saved["rating"],
+                     likes=None,
+                     dislikes=None,
+                     description=saved["description"],
+                     keywords=saved["keywords"],
+                     thumbnail_url=saved["thumbnail_url"],
+                     target_dir=video_path,
+                     streams=None,
+                     captions=None,
+                     channel=channel)
+        if channel is not None and result not in channel:
+            err_msg = (f"[{error_trace(cls)}] video is not contained in "
+                       f"specified channel: {result.id}")
+            raise ValueError(err_msg)
+        return result
 
     @classmethod
-    @lru_cache
+    @lru_cache(maxsize=256)
     def from_pytube(cls,
                     video_url: str,
                     channel: Channel | None = None) -> Video:
+        if not isinstance(video_url, str):
+            err_msg = (f"[{error_trace(cls)}] `video_url` must be a url "
+                       f"string (received object of type: {type(video_url)})")
+            raise TypeError(err_msg)
+        if not is_url(video_url):
+            err_msg = (f"[{error_trace(cls)}] `video_url` is not a valid url "
+                       f"(received: {repr(video_url)})")
+            raise ValueError(err_msg)
+        if channel is not None and not isinstance(channel, Channel):
+            err_msg = (f"[{error_trace(cls)}] `channel` must be an instance "
+                       f"of Channel (received object of type: {type(channel)})")
+            raise TypeError(err_msg)
         try:
             yt = pytube.YouTube(video_url)
-            return cls(source="local",
-                       video_id=video_url_to_id(video_url),
-                       video_title=yt.title,
-                       publish_date=yt.publish_date,
-                       last_updated=datetime.now(),
-                       duration=timedelta(seconds=yt.length),
-                       views=yt.views,
-                       rating=yt.rating,
-                       likes=None,
-                       dislikes=None,
-                       description=yt.description,
-                       keywords=yt.keywords,
-                       thumbnail_url=yt.thumbnail_url,
-                       target_dir=None,
-                       streams=yt.streams,
-                       captions=yt.captions,
-                       channel=channel)
+            video_id = video_url_to_id(video_url)
+            if channel is not None:
+                target_dir = Path(channel.target_dir, video_id)
+            else:
+                target_dir = Path(VIDEO_DIR, yt.channel_id, video_id)
+            result = cls(source="pytube",
+                         video_id=video_id,
+                         video_title=yt.title,
+                         publish_date=yt.publish_date,
+                         last_updated=datetime.now(),
+                         duration=timedelta(seconds=yt.length),
+                         views=yt.views,
+                         rating=yt.rating,
+                         likes=None,
+                         dislikes=None,
+                         description=yt.description,
+                         keywords=yt.keywords,
+                         thumbnail_url=yt.thumbnail_url,
+                         target_dir=target_dir,
+                         streams=yt.streams,
+                         captions=yt.captions,
+                         channel=channel)
         except (pytube.exceptions.AgeRestrictedError,
                 pytube.exceptions.MembersOnly,
                 pytube.exceptions.VideoPrivate,
@@ -586,6 +641,12 @@ class Video:
         except pytube.exceptions.VideoUnavailable as exc:
             err_msg = f"[{error_trace(cls)}] Video is unavailable: {video_url}"
             raise RuntimeError(err_msg) from exc
+        else:
+            if channel is not None and result not in channel:
+                err_msg = (f"[{error_trace(cls)}] video is not contained in "
+                           f"specified channel: {result.id}")
+                raise ValueError(err_msg)
+            return result
 
     ##########################
     ####    PROPERTIES    ####
@@ -891,8 +952,87 @@ class Video:
     ####    METHODS    ####
     #######################
 
+    def download(self,
+                 to: Path | None = None,
+                 quality: str | None = None,
+                 verbose: bool = True,
+                 timeout: int = 10,
+                 max_retries: int = 10,
+                 keep_separate: bool = False,
+                 caption_language: str = "en",
+                 dry_run: bool = False):
+        if self.source in ["local", "sql"]:
+            err_msg = (f"[{error_trace(self)}] cannot download a local or "
+                       f"sql-based video object: {repr(self.id)}")
+            raise RuntimeError(err_msg)
+        if len(self.streams) == 0:
+            err_msg = (f"[{error_trace(self)}] video has no available streams "
+                       f"to download: {repr(self.id)}")
+            raise RuntimeError(err_msg)
+        if self.target_dir is None and to is None:
+            err_msg = (f"[{error_trace(self)}] no target directory to "
+                       f"download to (`self.target_dir` and `to` are both "
+                       f"None): {repr(self.id)}")
+            raise RuntimeError(err_msg)
+        if to is not None:
+            self.target_dir = to
+
+        if verbose:
+            print(f"[{self.publish_date.date()}] {self.title}")
+        self.target_dir.mkdir(parents=True, exist_ok=True)
+        self.to_json(Path(self.target_dir, "info.json"))
+        self.stats.to_csv(Path(self.target_dir, "stats.csv"))
+        audio_path = Path(self.target_dir, f"[audio] {self.id}.mp4")
+        video_path = Path(self.target_dir, f"[video] {self.id}.mp4")
+        captions_path = Path(self.target_dir,
+                             f"[captions] ({caption_language}) {self.id}.srt")
+
+        if not dry_run and not self.is_downloaded():
+            self.streams.filter(adaptive=True, mime_type="video/mp4") \
+                        .order_by("resolution") \
+                        .desc() \
+                        .first() \
+                        .download(output_path=video_path.parent,
+                                  filename=video_path.name,
+                                  timeout=timeout,
+                                  max_retries=max_retries)
+            self.streams.filter(adaptive=True, mime_type="audio/mp4") \
+                        .order_by("abr") \
+                        .desc() \
+                        .first() \
+                        .download(output_path=audio_path.parent,
+                                  filename=audio_path.name,
+                                  timeout=timeout,
+                                  max_retries=max_retries)
+            caption_track = self.captions.get_by_language_code(caption_language)
+            if caption_track is not None:
+                caption_track.download(output_path=captions_path.parent,
+                                       title=captions_path.name,
+                                       srt=True)
+
+    def is_downloaded(self, tolerance: int | float = 1):
+        def duration(path):
+            cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                   '-of', 'default=noprint_wrappers=1:nokey=1', str(path)]
+            result = subprocess.run(cmd,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT,
+                                    check=True)
+            return timedelta(seconds=float(result.stdout))
+
+        audio_path = Path(self.target_dir, f"[audio] {self.id}.mp4")
+        video_path = Path(self.target_dir, f"[video] {self.id}.mp4")
+        if any(not p.exists() for p in [audio_path, video_path]):
+            return False
+        audio_duration = duration(audio_path)
+        video_duration = duration(video_path)
+        min_diff = timedelta(seconds=tolerance)
+        return (abs(audio_duration - self.duration) < min_diff and
+                abs(video_duration - self.duration) < min_diff)
+
     def to_json(self, json_path: Path = None) -> dict[str, str]:
         result = {
+            "archivetube_version": ARCHIVETUBE_VERSION_NUMBER,
             "video_id": self.id,
             "video_title": self.title,
             "publish_date": self.publish_date.isoformat(),
