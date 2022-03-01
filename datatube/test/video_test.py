@@ -6,8 +6,8 @@ import unittest
 
 import pytube
 
-from archivetube import ARCHIVETUBE_VERSION_NUMBER, ROOT_DIR, VIDEO_DIR
-from archivetube.youtube import Channel, Video, is_url, video_id_to_url
+from datatube import DATATUBE_VERSION_NUMBER, ROOT_DIR, VIDEO_DIR
+from datatube.youtube import Channel, Video, is_url, video_id_to_url
 
 
 TEST_VIDEO_ID = "dQw4w9WgXcQ"
@@ -23,7 +23,7 @@ TEST_CHANNEL_PROPERTIES = {
     "featured_channels_html": "",
     "videos_html": "",
     "workers": 1,
-    "target_dir": Path(ROOT_DIR, "archivetube", "test", "test_channels",
+    "target_dir": Path(ROOT_DIR, "datatube", "test", "test_channels",
                        TEST_CHANNEL_ID)
 }
 TEST_PROPERTIES = {
@@ -474,7 +474,7 @@ class VideoErrorTests(unittest.TestCase):
             "featured_channels_html": "",
             "videos_html": "",
             "workers": 1,
-            "target_dir": Path(ROOT_DIR, "archivetube", "test", "test_channels",
+            "target_dir": Path(ROOT_DIR, "datatube", "test", "test_channels",
                                "UCBR8-60-B28hp2BmDPdntcQ")
         }
         with self.assertRaises(ValueError) as err:
@@ -491,12 +491,12 @@ class BasicVideoTests(unittest.TestCase):
 
     def test_to_json(self):
         v = Video(**TEST_PROPERTIES)
-        json_path = Path(ROOT_DIR, "archivetube", "test",
+        json_path = Path(ROOT_DIR, "datatube", "test",
                          "video_test_json.json")
         json_path.unlink(missing_ok=True)
         json_dict = v.to_json(json_path=json_path)
         expected = {
-            "archivetube_version": ARCHIVETUBE_VERSION_NUMBER,
+            "datatube_version": DATATUBE_VERSION_NUMBER,
             "video_id": TEST_PROPERTIES["video_id"],
             "video_title": TEST_PROPERTIES["video_title"],
             "publish_date": TEST_PROPERTIES["publish_date"].isoformat(),

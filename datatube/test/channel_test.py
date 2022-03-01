@@ -6,8 +6,8 @@ import unittest
 
 import pytube
 
-from archivetube import ARCHIVETUBE_VERSION_NUMBER, ROOT_DIR, VIDEO_DIR
-from archivetube.youtube import Channel, channel_id_to_url, Video, is_video_id
+from datatube import DATATUBE_VERSION_NUMBER, ROOT_DIR, VIDEO_DIR
+from datatube.youtube import Channel, channel_id_to_url, Video, is_video_id
 
 
 TEST_PROPERTIES = {
@@ -17,7 +17,7 @@ TEST_PROPERTIES = {
     "video_ids": ["NeOBvwRfBWc", "QltYNmVUvh0", "SYQJPkiNJfE", "3WSmP7i9my8",
                   "TBuNVQ54dgg"],  # from official YouTube
     "last_updated": datetime.now(),
-    "target_dir": Path(ROOT_DIR, "archivetube", "test", "test_channels",
+    "target_dir": Path(ROOT_DIR, "datatube", "test", "test_channels",
                        "UCBR8-60-B28hp2BmDPdntcQ"),
     "about_html": "",
     "community_html": "",
@@ -255,12 +255,12 @@ class BasicChannelTests(unittest.TestCase):
 
     def test_to_json(self):
         c = Channel(**TEST_PROPERTIES)
-        json_path = Path(ROOT_DIR, "archivetube", "test", 
+        json_path = Path(ROOT_DIR, "datatube", "test", 
                          "channel_test_json.json")
         json_path.unlink(missing_ok=True)
         json_dict = c.to_json(json_path=json_path)
         expected = {
-            "archivetube_version": ARCHIVETUBE_VERSION_NUMBER,
+            "datatube_version": DATATUBE_VERSION_NUMBER,
             "channel_id": TEST_PROPERTIES["channel_id"],
             "channel_name": TEST_PROPERTIES["channel_name"],
             "last_updated": TEST_PROPERTIES["last_updated"].isoformat(),

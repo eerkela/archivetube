@@ -14,8 +14,8 @@ import pytube
 from tqdm import tqdm
 import validators
 
-from archivetube import ARCHIVETUBE_VERSION_NUMBER, VIDEO_DIR
-from archivetube.error import error_trace
+from datatube import DATATUBE_VERSION_NUMBER, VIDEO_DIR
+from datatube.error import error_trace
 
 
 """
@@ -366,7 +366,7 @@ class Channel:
 
     def to_json(self, json_path: Path | None = None) -> dict[str, str]:
         result = {
-            "archivetube_version": ARCHIVETUBE_VERSION_NUMBER,
+            "datatube_version": DATATUBE_VERSION_NUMBER,
             "channel_id": self.id,
             "channel_name": self.name,
             "last_updated": self.last_updated.isoformat(),
@@ -1032,7 +1032,7 @@ class Video:
 
     def to_json(self, json_path: Path = None) -> dict[str, str]:
         result = {
-            "archivetube_version": ARCHIVETUBE_VERSION_NUMBER,
+            "datatube_version": DATATUBE_VERSION_NUMBER,
             "video_id": self.id,
             "video_title": self.title,
             "publish_date": self.publish_date.isoformat(),

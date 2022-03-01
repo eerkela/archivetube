@@ -1,7 +1,7 @@
 import unittest
 
 import context
-from archivetube.test import *
+from datatube.test import *
 
 
 if __name__ == "__main__":
