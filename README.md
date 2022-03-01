@@ -1,2 +1,2 @@
-# archivetube
-Archival tool for YouTube videos.
+# datatube
+An archival and data analysis tool for YouTube videos.  Currently under development.
