@@ -1,6 +1,7 @@
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from functools import lru_cache
 import json
 from pathlib import Path
 import re
@@ -10,18 +11,38 @@ from urllib.error import URLError
 
 import pytube
 from tqdm import tqdm
+import validators
 
 from archivetube import VIDEO_DIR
 from archivetube.error import error_trace
 
-"""
-TODO: move checks into getter/setter properties for more pythonic approach
-TODO: write an automatic retry method using expressvpn
-"""
 
+"""
+TODO: write an automatic retry method using expressvpn
+TODO: video_ids, convert to paths/urls when needed
+"""
 
 
 AVAILABLE_SOURCES = ("local", "pytube", "sql")
+
+
+def is_readable(path: Path) -> bool:
+    return path.is_dir() and len(path.glob("info.json")) > 0
+
+
+def is_url(string: str) -> bool:
+    result = validators.url(string)
+    if isinstance(result, validators.ValidationFailure):
+        return False
+    return True
+
+
+def is_channel_id(string: str) -> bool:
+    return len(string) == 24 and string.startswith("UC")
+
+
+def is_video_id(string: str) -> bool:
+    return len(string) == 11
 
 
 def channel_id_to_url(channel_id: str) -> str:
@@ -47,92 +68,85 @@ class Channel:
                  channel_id: str,
                  channel_name: str,
                  last_updated: datetime,
-                 video_ids: list[str] | tuple[str] | set[str],
+                 video_ids: dict[str, str | Path],
+                 target_dir: Path,
                  about_html: str = "",
                  community_html: str = "",
                  featured_channels_html: str = "",
                  videos_html: str = "",
-                 workers: int | None = 1,
-                 target_dir: Path | None = None):
+                 workers: int | None = 1):
         self.source = source
         self.id = channel_id
         self.name = channel_name
         self.last_updated = last_updated
-        self.video_ids = video_ids
         self.html = {
             "about": about_html,
             "community": community_html,
             "featured_channels": featured_channels_html,
             "videos": videos_html
         }
+        self.video_ids = video_ids
+        self.target_dir = target_dir
         self.workers = workers
-        if target_dir is not None:
-            self.target_dir = target_dir
-        else:
-            self.target_dir = Path(VIDEO_DIR, self.id)
 
     #############################
     ####    CLASS METHODS    ####
     #############################
 
     @classmethod
-    def from_local(cls,
-                   channel_path: Path,
-                   progress_bar: bool = True) -> Channel:
-        channel_id = channel_path.name
-        info_path = Path(channel_path, "info.json")
-        if not channel_path.exists():
-            err_msg = (f"[{error_trace(cls)}] Channel directory does not "
-                       f"exist: {channel_path}")
+    @lru_cache
+    def from_local(cls, channel_path: Path) -> Channel:
+        if not isinstance(channel_path, Path):
+            err_msg = (f"[{error_trace(cls)}] `channel_path` must be a "
+                       f"Path-like object (received object of type: "
+                       f"{type(channel_path)})")
+            raise TypeError(err_msg)
+        if not is_readable(channel_path):
+            err_msg = (f"[{error_trace(cls)}] `channel_path` either does not "
+                       f"exist, is not a directory, or has no info.json file: "
+                       f"{channel_path}")
             raise ValueError(err_msg)
-        if not channel_path.is_dir():
-            err_msg = (f"[{error_trace(cls)}] Channel directory is not a "
-                       f"directory: {channel_path}")
-            raise ValueError(err_msg)
-        if not info_path.exists():
-            err_msg = (f"[{error_trace(cls)}] Channel directory has no "
-                       f"info.json file: {channel_path}")
-            raise ValueError(err_msg)
-        with info_path.open("r") as info_file:
+        with Path(channel_path, "info.json").open("r") as info_file:
             saved = json.load(info_file)
-        if progress_bar:
-            dir_contents = tqdm(channel_path.iterdir(), leave=False)
-        else:
-            dir_contents = channel_path.iterdir()
-        video_ids = [v_dir.name for v_dir in dir_contents if v_dir.is_dir()]
+        dir_contents = tqdm(channel_path.iterdir(), leave=False)
+        video_ids = {d.name: d for d in dir_contents if is_readable(d)}
         return cls(source="local",
-                   channel_id=channel_id,
+                   channel_id=saved["id"],
                    channel_name=saved["name"],
                    last_updated=datetime.fromisoformat(saved["fetched_at"]),
                    video_ids=video_ids,
+                   target_dir=channel_path,
                    about_html=saved["about_html"],
                    community_html=saved["community_html"],
                    featured_channels_html=saved["featured_channels_html"],
-                   videos_html=saved["videos_html"],
-                   target_dir=channel_path)
+                   videos_html=saved["videos_html"])
 
     @classmethod
-    def from_pytube(cls,
-                    channel_url: str,
-                    target_dir: Path | None = None,
-                    progress_bar: bool = True) -> Channel:
+    @lru_cache
+    def from_pytube(cls, channel_url: str) -> Channel:
+        if not isinstance(channel_url, str):
+            err_msg = (f"[{error_trace(cls)}] `channel_url` must be a string "
+                       f"(received object of type: {type(channel_url)})")
+            raise TypeError(err_msg)
+        channel_url = channel_url.strip()
+        if not is_url(channel_url):
+            err_msg = (f"[{error_trace(cls)}] `channel_url` must be a valid "
+                       f"url (received: {repr(channel_url)})")
+            raise ValueError(err_msg)
         try:
             online = pytube.Channel(channel_url)
-            if progress_bar:
-                channel_contents = tqdm(online.url_generator(), leave=False)
-            else:
-                channel_contents = online.url_generator()
+            channel_contents = tqdm(online.url_generator(), leave=False)
             video_ids = [video_url_to_id(url) for url in channel_contents]
             return cls(source="pytube",
                        channel_id=online.channel_id,
                        channel_name=online.channel_name,
                        last_updated=datetime.now(),
+                       video_ids=video_ids,
+                       target_dir=Path(VIDEO_DIR, online.channel_id),
                        about_html=online.about_html,
                        community_html=online.community_html,
                        featured_channels_html=online.featured_channels_html,
-                       videos_html=online.html,
-                       video_ids=video_ids,
-                       target_dir=target_dir)
+                       videos_html=online.html)
         except (URLError, gaierror) as exc:
             err_msg = (f"[{error_trace(cls)}] Network error when accessing "
                        f"channel: {channel_url}")
@@ -176,10 +190,14 @@ class Channel:
 
     @property
     def id(self) -> str:
-        return self._channel_id
+        return self._id
 
     @id.setter
     def id(self, new_id: str) -> None:
+        if hasattr(self, "_id"):
+            err_msg = (f"[{error_trace(self)}] `id` cannot be changed outside "
+                       f"of init")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `id` must be a unique 24-character "
                    f"ExternalId starting with 'UC', which is used by the "
                    f"YouTube backend to track channels")
@@ -189,7 +207,7 @@ class Channel:
         if len(new_id) != 24 or not new_id.startswith("UC"):
             context = (f"(received: {repr(new_id)})")
             raise ValueError(f"{err_msg} {context}")
-        self._channel_id = new_id
+        self._id = new_id
 
     @property
     def last_updated(self) -> datetime:
@@ -197,6 +215,10 @@ class Channel:
 
     @last_updated.setter
     def last_updated(self, new_timestamp: datetime) -> None:
+        if hasattr(self, "_last_updated"):
+            err_msg = (f"[{error_trace(self)}] `last_updated` cannot be "
+                       f"changed outside of init")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `last_updated` must be a "
                    f"datetime.datetime object stating the last time this "
                    f"channel was checked for updates")
@@ -208,9 +230,10 @@ class Channel:
             raise ValueError(f"{err_msg} {context}")
         self._last_updated = new_timestamp
 
+
     @property
     def name(self) -> str:
-        return self._channel_name
+        return self._name
 
     @name.setter
     def name(self, new_name: str) -> None:
@@ -221,7 +244,7 @@ class Channel:
         if not new_name:  # channel_name is empty string
             context = f"(received: {repr(new_name)})"
             raise ValueError(f"{err_msg} {context}")
-        self._channel_name = new_name
+        self._name = new_name
 
     @property
     def source(self) -> str:
@@ -229,6 +252,11 @@ class Channel:
 
     @source.setter
     def source(self, new_source: str) -> None:
+        if hasattr(self, "_source"):
+            err_msg = (f"[{error_trace(self)}] `source` cannot be changed "
+                       f"outside of init.  Construct a new Channel object "
+                       f"instead")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `source` must be a string with one "
                    f"of the following values: {repr(AVAILABLE_SOURCES)}")
         if not isinstance(new_source, str):
@@ -237,14 +265,7 @@ class Channel:
         if new_source not in AVAILABLE_SOURCES:
             context = f"(received: {repr(new_source)})"
             raise ValueError(f"{err_msg} {context}")
-        if hasattr(self, "_source"):
-            old_source = getattr(self, "_source")
-            self._source = new_source
-            if self._source != old_source:
-                # TODO: update channel information
-                raise NotImplementedError()
-        else:
-            self._source = new_source
+        self._source = new_source
 
     @property
     def target_dir(self) -> Path:
@@ -264,25 +285,25 @@ class Channel:
         self._target_dir = new_dir
 
     @property
-    def video_ids(self) -> list[str]:
+    def video_ids(self) -> list[str | Path]:
         return self._video_ids
 
     @video_ids.setter
     def video_ids(self, new_ids: list[str] | tuple[str] | set[str]) -> None:
         err_msg = (f"[{error_trace(self)}] `video_ids` must be a list, tuple, "
-                   f"or set of unique 11-character video id strings "
-                   f"referencing the video contents of this channel")
+                   f"or set of 11-character video ids used by the YouTube "
+                   f"backend to track videos")
         if not isinstance(new_ids, (list, tuple, set)):
             context = f"(received object of type: {type(new_ids)})"
             raise TypeError(f"{err_msg} {context}")
-        for v_id in new_ids:
-            if not isinstance(v_id, str):
-                context = f"(received video id of type: {type(v_id)})"
+        for video_id in new_ids:
+            if not isinstance(video_id, str):
+                context = f"(received id of type: {type(video_id)})"
                 raise TypeError(f"{err_msg} {context}")
-            if len(v_id) != 11:
-                context = f"(received malformed video id: {repr(v_id)})"
+            if not is_video_id(video_id):
+                context = f"(encountered malformed video id: {repr(video_id)})"
                 raise ValueError(f"{err_msg} {context}")
-        self._video_ids = list(new_ids)
+        self._video_ids = new_ids
 
     @property
     def workers(self) -> int:
@@ -331,44 +352,67 @@ class Channel:
     ####    DUNDER/MAGIC METHODS    ####
     ####################################
 
+    def __contains__(self, video: Video) -> bool:
+        return video.id in self.video_ids
+
     def __eq__(self, other: Channel) -> bool:
         return self.id == other.id and self.last_updated == other.last_updated
 
     def __iter__(self) -> Iterator[Video]:
         if self.workers is not None and self.workers == 1:
             if self.source == "local":
-                for video_id in self.video_ids:
-                    yield Video.from_local(Path(self.target_dir, video_id))
+                for v_id in self.video_ids:
+                    try:
+                        path = Path(self.target_dir, v_id)
+                        yield Video.from_local(path, self)
+                    except (KeyboardInterrupt, SystemExit):
+                        raise
+                    except Exception as exc:
+                        print(exc)
+                        continue
             elif self.source == "pytube":
-                for video_id in self.video_ids:
-                    yield Video.from_pytube(video_id_to_url(video_id))
+                for v_id in self.video_ids:
+                    try:
+                        url = video_id_to_url(v_id)
+                        yield Video.from_pytube(url, self)
+                    except (KeyboardInterrupt, SystemExit):
+                        raise
+                    except Exception as exc:
+                        print(exc)
+                        continue
             elif self.source == "sql":
-                for video_id in self.video_ids:
-                    yield Video.from_sql(video_id)
+                for v_id in self.video_ids:
+                    try:
+                        yield Video.from_sql(v_id, self)
+                    except (KeyboardInterrupt, SystemExit):
+                        raise
+                    except Exception as exc:
+                        print(exc)
+                        continue
         else:  # multithreading
             with ThreadPoolExecutor(max_workers=self.workers) as executor:
                 try:
+                    futures = []
                     if self.source == "local":
-                        def dispatch(video_id):
-                            path = Path(self.target_dir, video_id)
-                            return executor.submit(Video.from_local, path)
-                        futures = [dispatch(v_id) for v_id in self.video_ids]
+                        for v_id in self.video_ids:
+                            path = Path(self.target_dir, v_id)
+                            f = executor.submit(Video.from_local, path, self)
+                            futures.append(f)
                     elif self.source == "pytube":
-                        def dispatch(video_id):
-                            url = video_id_to_url(video_id)
-                            return executor.submit(Video.from_pytube, url)
-                        futures = [dispatch(v_id) for v_id in self.video_ids]
+                        for v_id in self.video_ids:
+                            url = video_id_to_url(v_id)
+                            f = executor.submit(Video.from_pytube, url, self)
+                            futures.append(f)
                     elif self.source == "sql":
-                        def dispatch(video_id):
-                            return executor.submit(Video.from_sql, video_id)
-                        futures = [dispatch(v_id) for v_id in self.video_ids]
+                        for v_id in self.video_ids:
+                            f = executor.submit(Video.from_sql, v_id, self)
+                            futures.append(f)
                     for future in as_completed(futures):
                         exc = future.exception()
                         if exc is not None:
-                            executor.shutdown(cancel_futures=True)
-                            raise exc
-                        else:
-                            yield future.result()
+                            print(exc)
+                            continue
+                        yield future.result()
                 except (KeyboardInterrupt, SystemExit) as exc:
                     print("Received kill signal.  Shutting down threads...")
                     executor.shutdown(cancel_futures=True)
@@ -378,7 +422,7 @@ class Channel:
         return len(self.video_ids)
 
     def __repr__(self) -> str:
-        def crop_ids(id_list: list[str], threshold: int = 5) -> str:
+        def crop_contents(id_list: list[str], threshold: int = 5) -> str:
             if len(id_list) > threshold:
                 formatted = "', '".join(id_list[:threshold])
                 return f"['{formatted}', ...]"
@@ -394,16 +438,16 @@ class Channel:
             "channel_id": repr(self.id),
             "channel_name": repr(self.name),
             "last_updated": repr(self.last_updated),
-            "video_ids": crop_ids(self.video_ids),
+            "video_ids": crop_contents(self.video_ids),
+            "target_dir": repr(self.target_dir),
             "about_html": crop_html(self.html["about"]),
             "community_html": crop_html(self.html["community"]),
             "featured_channels_html": crop_html(self.html["featured_channels"]),
             "videos_html": crop_html(self.html["videos"]),
-            "workers": repr(self.workers),
-            "target_dir": repr(self.target_dir)
+            "workers": repr(self.workers)
         }
-        chained = [f"{k}={v}" for k, v in prop_dict.items()]
-        return f"Channel({', '.join(chained)})"
+        formatted = [f"{k}={v}" for k, v in prop_dict.items()]
+        return f"Channel({', '.join(formatted)})"
 
     def __str__(self) -> str:
         return f"[{self.last_updated}] {self.name} ({self.__len__()})"
@@ -452,25 +496,30 @@ class Video:
             self.target_dir = target_dir
         elif self.channel is not None:
             self.target_dir = Path(self.channel.target_dir, self.id)
+        else:
+            self._target_dir = None  # naked pytube video
 
     #############################
     ####    CLASS METHODS    ####
     #############################
 
     @classmethod
+    @lru_cache
     def from_local(cls,
                    video_path: Path,
                    channel: Channel | None = None) -> Video:
-        info_path = Path(video_path, "info.json")
-        if not video_path.exists() or not video_path.is_dir():
-            err_msg = (f"[{error_trace(cls)}] video directory does not exist: "
-                       f"{video_path}")
+        if not isinstance(video_path, Path):
+            err_msg = (f"[{error_trace(cls)}] `video_path` must be a "
+                       f"Path-like object pointing to a video directory on "
+                       f"local storage (received object of type: "
+                       f"{type(video_path)})")
+            raise TypeError(err_msg)
+        if not is_readable(video_path):
+            err_msg = (f"[{error_trace(cls)}] `video_path` is not readable "
+                       f"(does not exist, is not a directory, or has no "
+                       f"info.json file): {video_path}")
             raise ValueError(err_msg)
-        if not info_path.exists():
-            err_msg = (f"[{error_trace(cls)}] video directory has no "
-                       f"info.json file: {video_path}")
-            raise ValueError(err_msg)
-        with info_path.open("r") as info_file:
+        with Path(video_path, "info.json").open("r") as info_file:
             saved = json.load(info_file)
         return cls(source="local",
                    video_id=saved["id"],
@@ -491,30 +540,28 @@ class Video:
                    channel=channel)
 
     @classmethod
+    @lru_cache
     def from_pytube(cls,
                     video_url: str,
-                    channel: Channel | None = None,
-                    target_dir: Path | None = None) -> Video:
+                    channel: Channel | None = None) -> Video:
         try:
-            online = pytube.YouTube(video_url)
-            if channel is None:
-                channel = Channel.from_pytube(online.channel_url)
+            yt = pytube.YouTube(video_url)
             return cls(source="local",
                        video_id=video_url_to_id(video_url),
-                       video_title=online.title,
-                       publish_date=online.publish_date,
+                       video_title=yt.title,
+                       publish_date=yt.publish_date,
                        last_updated=datetime.now(),
-                       duration=timedelta(seconds=online.length),
-                       views=online.views,
-                       rating=online.rating,
+                       duration=timedelta(seconds=yt.length),
+                       views=yt.views,
+                       rating=yt.rating,
                        likes=None,
                        dislikes=None,
-                       description=online.description,
-                       keywords=online.keywords,
-                       thumbnail_url=online.thumbnail_url,
-                       target_dir=target_dir,
-                       streams=online.streams,
-                       captions=online.captions,
+                       description=yt.description,
+                       keywords=yt.keywords,
+                       thumbnail_url=yt.thumbnail_url,
+                       target_dir=None,
+                       streams=yt.streams,
+                       captions=yt.captions,
                        channel=channel)
         except (pytube.exceptions.AgeRestrictedError,
                 pytube.exceptions.MembersOnly,
@@ -550,6 +597,10 @@ class Video:
 
     @captions.setter
     def captions(self, new_captions: pytube.CaptionQuery | None) -> None:
+        if hasattr(self, "_captions"):
+            err_msg = (f"[{error_trace(self)}] `captions` cannot be changed "
+                       f"outside of init")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `captions` must be a "
                    f"pytube.CaptionQuery object or None if the video has no "
                    f"captions")
@@ -621,6 +672,10 @@ class Video:
 
     @id.setter
     def id(self, new_id: str) -> None:
+        if hasattr(self, "_id"):
+            err_msg = (f"[{error_trace(self)}] `id` cannot be changed outside "
+                       f"of init")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `id` must be a unique 11-character "
                    f"id string used by the YouTube backend to track videos")
         if not isinstance(new_id, str):
@@ -657,6 +712,10 @@ class Video:
 
     @last_updated.setter
     def last_updated(self, new_date: datetime) -> None:
+        if hasattr(self, "_last_updated"):
+            err_msg = (f"[{error_trace(self)}] `last_updated` cannot be "
+                       f"changed outside of init")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `last_updated` must be a "
                    f"datetime.datetime object stating the last time this "
                    f"video was checked for updates")
@@ -691,6 +750,11 @@ class Video:
 
     @source.setter
     def source(self, new_source: str) -> None:
+        if hasattr(self, "_source"):
+            err_msg = (f"[{error_trace(self)}] `source` cannot be changed "
+                       f"outside of init.  Construct a new Video object "
+                       f"instead")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `source` must be a string with one "
                    f"of the following values: {repr(AVAILABLE_SOURCES)}")
         if not isinstance(new_source, str):
@@ -719,12 +783,12 @@ class Video:
         if not isinstance(new_stats, dict):
             context = f"(received object of type: {type(new_stats)})"
             raise TypeError(f"{err_msg} {context}")
-        if ("rating" not in new_stats and
-            ("likes" not in new_stats or "dislikes" not in new_stats)):
-            context = ("(not enough information to compute rating: no "
-                       "'rating' entry and no 'likes' and 'dislikes' to "
-                       "compute it)")
-            raise ValueError(f"{err_msg} {context}")
+        # if ("rating" not in new_stats and
+        #     ("likes" not in new_stats or "dislikes" not in new_stats)):
+        #     context = ("(not enough information to compute rating: no "
+        #                "'rating' entry and no 'likes' and 'dislikes' to "
+        #                "compute it)")
+        #     raise ValueError(f"{err_msg} {context}")
         for k, v in new_stats.items():
             if not isinstance(k, str):
                 context = f"(received non-string key of type: {type(k)})"
@@ -762,6 +826,10 @@ class Video:
 
     @streams.setter
     def streams(self, new_streams: pytube.StreamQuery | None) -> None:
+        if hasattr(self, "_streams"):
+            err_msg = (f"[{error_trace(self)}] `streams` cannot be changed "
+                       f"outside of init")
+            raise AttributeError(err_msg)
         err_msg = (f"[{error_trace(self)}] `streams` must be a "
                    f"pytube.StreamQuery object or None if the video has no "
                    f"streams")
@@ -785,7 +853,7 @@ class Video:
         if not isinstance(new_dir, Path):
             context = f"(received object of type: {type(new_dir)})"
             raise TypeError(f"{err_msg} {context}")
-        if new_dir.exists() and not new_dir.is_dir():
+        if new_dir.exists() and new_dir.is_file():
             context = f"(path points to file: {new_dir})"
             raise ValueError(f"{err_msg} {context}")
         self._target_dir = new_dir

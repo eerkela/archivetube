@@ -21,7 +21,7 @@ class BasicVideoTests(unittest.TestCase):
         "source": "local",
         "channel_id": TEST_CHANNEL_ID,
         "channel_name": "Rick Astley",
-        "video_ids": [TEST_VIDEO_ID],
+        "video_ids": [TEST_VIDEO_ID, "DifferentId"],
         "last_updated": current_time,
         "about_html": "",
         "community_html": "",
@@ -144,6 +144,14 @@ class BasicVideoTests(unittest.TestCase):
                    "(received: 'bad source value')")
         self.assertEqual(str(err.exception), err_msg)
 
+        # assignment outside init
+        v = Video(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            v.source = "something else"
+        err_msg = ("[Video.source] `source` cannot be changed outside of "
+                   "init.  Construct a new Video object instead")
+        self.assertEqual(str(err.exception), err_msg)
+
     def test_video_id_errors(self):
         # bad video_id type
         with self.assertRaises(TypeError) as err:
@@ -159,6 +167,13 @@ class BasicVideoTests(unittest.TestCase):
         err_msg = ("[Video.id] `id` must be a unique 11-character id string "
                    "used by the YouTube backend to track videos (received: "
                    "'not11characters')")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # assignment outside init
+        v = Video(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            v.id = "something else"
+        err_msg = "[Video.id] `id` cannot be changed outside of init"
         self.assertEqual(str(err.exception), err_msg)
 
     def test_video_title_errors(self):
@@ -212,6 +227,14 @@ class BasicVideoTests(unittest.TestCase):
                    f"video was checked for updates ({datetime(9999, 12, 31)} "
                    f"> ")
         self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
+
+        # assignment outside init
+        v = Video(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            v.last_updated = datetime.now()
+        err_msg = ("[Video.last_updated] `last_updated` cannot be changed "
+                   "outside of init")
+        self.assertEqual(str(err.exception), err_msg)
 
     def test_duration_errors(self):
         # bad duration type
@@ -401,6 +424,14 @@ class BasicVideoTests(unittest.TestCase):
         self.assertTrue(isinstance(v.streams, pytube.StreamQuery))
         self.assertEqual(len(v.streams), 0)
 
+        # assignment outside init
+        v = Video(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            v.streams = pytube.StreamQuery([])
+        err_msg = ("[Video.streams] `streams` cannot be changed outside of "
+                   "init")
+        self.assertEqual(str(err.exception), err_msg)
+
     def test_captions_errors(self):
         # bad captions type
         with self.assertRaises(TypeError) as err:
@@ -414,6 +445,14 @@ class BasicVideoTests(unittest.TestCase):
         v = Video(**{**self.properties, "captions": None})
         self.assertTrue(isinstance(v.captions, pytube.CaptionQuery))
         self.assertEqual(len(v.captions), 0)
+
+        # assignment outside init
+        v = Video(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            v.captions = pytube.CaptionQuery([])
+        err_msg = ("[Video.captions] `captions` cannot be changed outside of "
+                   "init")
+        self.assertEqual(str(err.exception), err_msg)
 
     def test_channel_errors(self):
         # bad channel type
@@ -481,11 +520,10 @@ class BasicVideoTests(unittest.TestCase):
         v1 = Video(**self.properties)
         v2 = Video(**self.properties)
         self.assertEqual(v1, v2)
-        v1.id = "DifferentId"  # still 11 characters
-        self.assertNotEqual(v1, v2)
-        v1.id = self.properties["video_id"]
-        v1.last_updated = datetime.now()
-        self.assertNotEqual(v1, v2)
+        v3 = Video(**{**self.properties, "video_id": "DifferentId"})
+        self.assertNotEqual(v1, v3)
+        v4 = Video(**{**self.properties, "last_updated": datetime.now()})
+        self.assertNotEqual(v1, v4)
 
 
 class PytubeVideoTests(unittest.TestCase):

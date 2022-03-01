@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 from pathlib import Path
+import time
 import unittest
 
 from archivetube import ROOT_DIR, VIDEO_DIR
@@ -17,16 +18,16 @@ class BasicChannelTests(unittest.TestCase):
         "source": "local",
         "channel_id": TEST_CHANNEL_ID,
         "channel_name": "YouTube",
-        "video_ids": ["NeOBvwRfBWc", "QltYNmVUvh0", "SYQJPkiNJfE", "3WSmP7i9my8",
-                      "TBuNVQ54dgg"],  # taken from official YouTube channel,
+        "video_ids": ["NeOBvwRfBWc", "QltYNmVUvh0", "SYQJPkiNJfE",
+                     "3WSmP7i9my8", "TBuNVQ54dgg"],  # from official YouTube
         "last_updated": current_time,
+        "target_dir": Path(ROOT_DIR, "archivetube", "test", "test_channels",
+                           TEST_CHANNEL_ID),
         "about_html": "",
         "community_html": "",
         "featured_channels_html": "",
         "videos_html": "",
-        "workers": 1,
-        "target_dir": Path(ROOT_DIR, "archivetube", "test", "test_channels",
-                           TEST_CHANNEL_ID)
+        "workers": 1
     }
 
     def test_init_good_input(self):
@@ -61,6 +62,14 @@ class BasicChannelTests(unittest.TestCase):
                    "(received: 'bad source value')")
         self.assertEqual(str(err.exception), err_msg)
 
+        # assignment outside init
+        c = Channel(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            c.source = "something else"
+        err_msg = ("[Channel.source] `source` cannot be changed outside of "
+                   "init.  Construct a new Channel object instead")
+        self.assertEqual(str(err.exception), err_msg)
+
     def test_channel_id_errors(self):
         # bad channel id type
         with self.assertRaises(TypeError) as err:
@@ -88,6 +97,13 @@ class BasicChannelTests(unittest.TestCase):
                    f"ExternalId starting with 'UC', which is used by the "
                    f"YouTube backend to track channels (received: "
                    f"{repr(bad_start)})")
+        self.assertEqual(str(err.exception), err_msg)
+
+        # assignment outside init
+        c = Channel(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            c.id = "something else"
+        err_msg = "[Channel.id] `id` cannot be changed outside of init"
         self.assertEqual(str(err.exception), err_msg)
 
     def test_channel_name_errors(self):
@@ -125,25 +141,32 @@ class BasicChannelTests(unittest.TestCase):
                    f"({datetime(9999, 12, 31)} > ")
         self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
+        # assignment outside init
+        c = Channel(**{**self.properties})
+        with self.assertRaises(AttributeError) as err:
+            c.last_updated = datetime.now()
+        err_msg = ("[Channel.last_updated] `last_updated` cannot be changed "
+                   "outside of init")
+        self.assertEqual(str(err.exception), err_msg)
+
     def test_video_ids_errors(self):
+        self.maxDiff = None
         test_ids = self.properties["video_ids"]
 
         # bad id type
         with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "video_ids": str(test_ids)})
         err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
-                   "set of unique 11-character video id strings referencing "
-                   "the video contents of this channel (received object of "
-                   "type: <class 'str'>)")
+                   "set of 11-character video ids used by the YouTube backend "
+                   "to track videos (received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # bad id type
         with self.assertRaises(TypeError) as err:
             Channel(**{**self.properties, "video_ids": test_ids + [123]})
         err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
-                   "set of unique 11-character video id strings referencing "
-                   "the video contents of this channel (received video id of "
-                   "type: <class 'int'>)")
+                   "set of 11-character video ids used by the YouTube backend "
+                   "to track videos (received id of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # bad id length
@@ -151,9 +174,9 @@ class BasicChannelTests(unittest.TestCase):
             Channel(**{**self.properties,
                        "video_ids": test_ids + ["not11characters"]})
         err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
-                   "set of unique 11-character video id strings referencing "
-                   "the video contents of this channel (received malformed "
-                   "video id: 'not11characters')")
+                   "set of 11-character video ids used by the YouTube backend "
+                   "to track videos (encountered malformed video id: "
+                   "'not11characters')")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_about_html_errors(self):
@@ -229,7 +252,8 @@ class BasicChannelTests(unittest.TestCase):
 
     def test_to_json(self):
         c = Channel(**self.properties)
-        json_path = Path(ROOT_DIR, "archivetube", "test", "test_json.json")
+        json_path = Path(ROOT_DIR, "archivetube", "test", 
+                         "channel_test_json.json")
         json_path.unlink(missing_ok=True)
         json_dict = c.to_json(json_path=json_path)
         expected = {
@@ -257,16 +281,24 @@ class BasicChannelTests(unittest.TestCase):
         c1 = Channel(**self.properties)
         c2 = Channel(**self.properties)
         self.assertEqual(c1, c2)
-        c1.id = "UCuAXFkgsw1L7xaCfnd5JJOw"  # Rick Astley
-        self.assertNotEqual(c1, c2)
-        c1.id = TEST_CHANNEL_ID
-        c1.last_updated = datetime.now()
-        self.assertNotEqual(c1, c2)
+        # Rick Astley
+        c3 = Channel(**{**self.properties,
+                        "channel_id": "UCuAXFkgsw1L7xaCfnd5JJOw"})
+        self.assertNotEqual(c1, c3)
+        c4 = Channel(**{**self.properties, "last_updated": datetime.now()})
+        self.assertNotEqual(c1, c4)
 
 
 class PytubeChannelTests(unittest.TestCase):
 
     channel_url = channel_id_to_url(TEST_CHANNEL_ID)
 
-    def test_load_from_pytube(self):
-        c = Channel.from_pytube(self.channel_url, progress_bar=False)
+    def test_load_from_pytube_caching(self):
+        def time_get():
+            start = time.perf_counter()
+            Channel.from_pytube(self.channel_url)
+            end = time.perf_counter()
+            return end - start
+
+        times = [time_get() for _ in range(5)]
+        self.assertTrue(sum(times) < 2 * times[0])
