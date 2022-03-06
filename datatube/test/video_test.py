@@ -23,7 +23,7 @@ TEST_CHANNEL_PROPERTIES = {
     "featured_channels_html": "",
     "videos_html": "",
     "workers": 1,
-    "target_dir": Path(ROOT_DIR, "datatube", "test", "test_channels",
+    "target_dir": Path(ROOT_DIR, "datatube", "test", "test_data",
                        TEST_CHANNEL_ID)
 }
 TEST_PROPERTIES = {
@@ -474,7 +474,7 @@ class VideoErrorTests(unittest.TestCase):
             "featured_channels_html": "",
             "videos_html": "",
             "workers": 1,
-            "target_dir": Path(ROOT_DIR, "datatube", "test", "test_channels",
+            "target_dir": Path(ROOT_DIR, "datatube", "test", "test_data",
                                "UCBR8-60-B28hp2BmDPdntcQ")
         }
         with self.assertRaises(ValueError) as err:
@@ -491,7 +491,7 @@ class BasicVideoTests(unittest.TestCase):
 
     def test_to_json(self):
         v = Video(**TEST_PROPERTIES)
-        json_path = Path(ROOT_DIR, "datatube", "test",
+        json_path = Path(ROOT_DIR, "datatube", "test", "test_data",
                          "video_test_json.json")
         json_path.unlink(missing_ok=True)
         json_dict = v.to_json(json_path=json_path)

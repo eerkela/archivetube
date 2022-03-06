@@ -19,7 +19,8 @@ from datatube.error import error_trace
 
 
 """
-TODO: write an automatic retry method using expressvpn
+TODO: write an automatic retry method using expressvpn proxies
+TODO: write a Stats container for video view/rating statistics
 """
 
 
@@ -382,6 +383,7 @@ class Channel:
                 err_msg = (f"[{error_trace(self)}] `json_path` must end with "
                            f"must end with '.json' extension: {json_path}")
                 raise ValueError(err_msg)
+            json_path.parent.mkdir(parents=True, exist_ok=True)
             with json_path.open("w") as json_file:
                 json_path.parent.mkdir(exist_ok=True)
                 json.dump(result, json_file)
@@ -742,7 +744,7 @@ class Video:
         if not isinstance(new_id, str):
             context = f"(received object of type: {type(new_id)})"
             raise TypeError(f"{err_msg} {context}")
-        if len(new_id) != 11:
+        if not is_video_id(new_id):
             context = f"(received: {repr(new_id)})"
             raise ValueError(f"{err_msg} {context}")
         self._id = new_id
@@ -783,8 +785,9 @@ class Video:
         if not isinstance(new_date, datetime):
             context = f"(received object of type: {type(new_date)})"
             raise TypeError(f"{err_msg} {context}")
-        if new_date > datetime.now():
-            context = f"({str(new_date)} > {str(datetime.now())})"
+        current_time = datetime.now()
+        if new_date > current_time:
+            context = f"({new_date} > {current_time})"
             raise ValueError(f"{err_msg} {context}")
         self._last_updated = new_date
 
@@ -1053,6 +1056,7 @@ class Video:
                 err_msg = (f"[{error_trace(self)}] `json_path` must end with "
                            f"must end with '.json' extension: {json_path}")
                 raise ValueError(err_msg)
+            json_path.parent.mkdir(parents=True, exist_ok=True)
             with json_path.open("w") as json_file:
                 json_path.parent.mkdir(exist_ok=True)
                 json.dump(result, json_file)

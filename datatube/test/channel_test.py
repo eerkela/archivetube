@@ -17,7 +17,7 @@ TEST_PROPERTIES = {
     "video_ids": ["NeOBvwRfBWc", "QltYNmVUvh0", "SYQJPkiNJfE", "3WSmP7i9my8",
                   "TBuNVQ54dgg"],  # from official YouTube
     "last_updated": datetime.now(),
-    "target_dir": Path(ROOT_DIR, "datatube", "test", "test_channels",
+    "target_dir": Path(ROOT_DIR, "datatube", "test", "test_data",
                        "UCBR8-60-B28hp2BmDPdntcQ"),
     "about_html": "",
     "community_html": "",
@@ -255,7 +255,7 @@ class BasicChannelTests(unittest.TestCase):
 
     def test_to_json(self):
         c = Channel(**TEST_PROPERTIES)
-        json_path = Path(ROOT_DIR, "datatube", "test", 
+        json_path = Path(ROOT_DIR, "datatube", "test", "test_data",
                          "channel_test_json.json")
         json_path.unlink(missing_ok=True)
         json_dict = c.to_json(json_path=json_path)
@@ -269,7 +269,7 @@ class BasicChannelTests(unittest.TestCase):
                 "community": TEST_PROPERTIES["community_html"],
                 "featured_channels": TEST_PROPERTIES["featured_channels_html"],
                 "videos": TEST_PROPERTIES["videos_html"]
-            } 
+            }
         }
         self.assertEqual(json_dict, expected)
         self.assertTrue(json_path.exists())
