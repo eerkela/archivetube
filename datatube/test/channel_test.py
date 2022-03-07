@@ -7,7 +7,8 @@ import unittest
 import pytube
 
 from datatube import DATATUBE_VERSION_NUMBER, ROOT_DIR, VIDEO_DIR
-from datatube.youtube import Channel, channel_id_to_url, Video, is_video_id
+import datatube.check as check
+from datatube.youtube import Channel, channel_id_to_url, Video
 
 
 TEST_PROPERTIES = {
@@ -48,7 +49,7 @@ class ChannelErrorTests(unittest.TestCase):
         # bad source type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "source": 123})
-        err_msg = ("[Channel.source] `source` must be a string with one of "
+        err_msg = ("[datatube.youtube.Channel.source] `source` must be a string with one of "
                    "the following values: ('local', 'pytube', 'sql') "
                    "(received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -56,7 +57,7 @@ class ChannelErrorTests(unittest.TestCase):
         # bad source value
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES, "source": "bad source value"})
-        err_msg = ("[Channel.source] `source` must be a string with one of "
+        err_msg = ("[datatube.youtube.Channel.source] `source` must be a string with one of "
                    "the following values: ('local', 'pytube', 'sql') "
                    "(received: 'bad source value')")
         self.assertEqual(str(err.exception), err_msg)
@@ -65,7 +66,7 @@ class ChannelErrorTests(unittest.TestCase):
         c = Channel(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             c.source = "something else"
-        err_msg = ("[Channel.source] `source` cannot be changed outside of "
+        err_msg = ("[datatube.youtube.Channel.source] `source` cannot be changed outside of "
                    "init.  Construct a new Channel object instead")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -73,19 +74,19 @@ class ChannelErrorTests(unittest.TestCase):
         # bad channel id type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "channel_id": 123})
-        err_msg = ("[Channel.id] `id` must be a unique 24-character "
-                   "ExternalId starting with 'UC', which is used by the "
-                   "YouTube backend to track channels (received object of "
-                   "type: <class 'int'>)")
+        err_msg = ("[datatube.youtube.Channel.id] `id` must be a unique, "
+                   "24-character ExternalId starting with 'UC', which is used "
+                   "by the YouTube backend to track channels (received object "
+                   "of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # bad channel id length
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES,
                        "channel_id": TEST_PROPERTIES["channel_id"][:-2]})
-        err_msg = (f"[Channel.id] `id` must be a unique 24-character "
-                   f"ExternalId starting with 'UC', which is used by the "
-                   f"YouTube backend to track channels (received: "
+        err_msg = (f"[datatube.youtube.Channel.id] `id` must be a unique, "
+                   f"24-character ExternalId starting with 'UC', which is used "
+                   f"by the YouTube backend to track channels (received: "
                    f"{repr(TEST_PROPERTIES['channel_id'][:-2])})")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -93,9 +94,9 @@ class ChannelErrorTests(unittest.TestCase):
         bad_start = f"XX{TEST_PROPERTIES['channel_id'][2:]}"
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES, "channel_id": bad_start})
-        err_msg = (f"[Channel.id] `id` must be a unique 24-character "
-                   f"ExternalId starting with 'UC', which is used by the "
-                   f"YouTube backend to track channels (received: "
+        err_msg = (f"[datatube.youtube.Channel.id] `id` must be a unique, "
+                   f"24-character ExternalId starting with 'UC', which is used "
+                   f"by the YouTube backend to track channels (received: "
                    f"{repr(bad_start)})")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -103,21 +104,21 @@ class ChannelErrorTests(unittest.TestCase):
         c = Channel(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             c.id = "something else"
-        err_msg = "[Channel.id] `id` cannot be changed outside of init"
+        err_msg = "[datatube.youtube.Channel.id] `id` cannot be changed outside of init"
         self.assertEqual(str(err.exception), err_msg)
 
     def test_channel_name_errors(self):
         # bad channel name type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "channel_name": 123})
-        err_msg = ("[Channel.name] `name` must be a non-empty string "
+        err_msg = ("[datatube.youtube.Channel.name] `name` must be a non-empty string "
                    "(received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # empty channel name
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES, "channel_name": ""})
-        err_msg = ("[Channel.name] `name` must be a non-empty string "
+        err_msg = ("[datatube.youtube.Channel.name] `name` must be a non-empty string "
                    "(received: '')")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -125,28 +126,28 @@ class ChannelErrorTests(unittest.TestCase):
         # bad type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "last_updated": 123})
-        err_msg = ("[Channel.last_updated] `last_updated` must be a "
-                   "datetime.datetime object stating the last time this "
-                   "channel was checked for updates (received object of type: "
-                   "<class 'int'>)")
+        err_msg = ("[datatube.youtube.Channel.last_updated] `last_updated` "
+                   "must be a datetime.datetime object stating the last time "
+                   "this channel was checked for updates (received object of "
+                   "type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # in the future
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES,
                        "last_updated": datetime(9999, 12, 31)})
-        err_msg = (f"[Channel.last_updated] `last_updated` must be a "
-                   f"datetime.datetime object stating the last time this "
-                   f"channel was checked for updates "
-                   f"({datetime(9999, 12, 31)} > ")
+        err_msg = (f"[datatube.youtube.Channel.last_updated] `last_updated` "
+                   f"must be a datetime.datetime object stating the last time "
+                   f"this channel was checked for updates (timestamp in the "
+                   f"future: {datetime(9999, 12, 31)} > ")
         self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
         # assignment outside init
         c = Channel(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             c.last_updated = datetime.now()
-        err_msg = ("[Channel.last_updated] `last_updated` cannot be changed "
-                   "outside of init")
+        err_msg = ("[datatube.youtube.Channel.last_updated] `last_updated` "
+                   "cannot be changed outside of init")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_video_ids_errors(self):
@@ -156,7 +157,7 @@ class ChannelErrorTests(unittest.TestCase):
         # bad id type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "video_ids": str(test_ids)})
-        err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
+        err_msg = ("[datatube.youtube.Channel.video_ids] `video_ids` must be a list, tuple, or "
                    "set of 11-character video ids used by the YouTube backend "
                    "to track videos (received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -164,7 +165,7 @@ class ChannelErrorTests(unittest.TestCase):
         # bad id type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "video_ids": test_ids + [123]})
-        err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
+        err_msg = ("[datatube.youtube.Channel.video_ids] `video_ids` must be a list, tuple, or "
                    "set of 11-character video ids used by the YouTube backend "
                    "to track videos (received id of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -173,7 +174,7 @@ class ChannelErrorTests(unittest.TestCase):
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES,
                        "video_ids": test_ids + ["not11characters"]})
-        err_msg = ("[Channel.video_ids] `video_ids` must be a list, tuple, or "
+        err_msg = ("[datatube.youtube.Channel.video_ids] `video_ids` must be a list, tuple, or "
                    "set of 11-character video ids used by the YouTube backend "
                    "to track videos (encountered malformed video id: "
                    "'not11characters')")
@@ -183,43 +184,43 @@ class ChannelErrorTests(unittest.TestCase):
         # bad type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "about_html": 123})
-        err_msg = ("[Channel.html] `html` must be a registry of raw html "
-                   "response strings for the current channel (received value "
-                   "of type: <class 'int'> for key: 'about')")
+        err_msg = ("[datatube.youtube.Channel.html] `html` must be a registry "
+                   "of raw html response strings (received value of type: "
+                   "<class 'int'> for key: 'about')")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_community_html_errors(self):
         # bad type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "community_html": 123})
-        err_msg = ("[Channel.html] `html` must be a registry of raw html "
-                   "response strings for the current channel (received value "
-                   "of type: <class 'int'> for key: 'community')")
+        err_msg = ("[datatube.youtube.Channel.html] `html` must be a registry "
+                   "of raw html response strings (received value of type: "
+                   "<class 'int'> for key: 'community')")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_featured_channels_html_errors(self):
         # bad type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "featured_channels_html": 123})
-        err_msg = ("[Channel.html] `html` must be a registry of raw html "
-                   "response strings for the current channel (received value "
-                   "of type: <class 'int'> for key: 'featured_channels')")
+        err_msg = ("[datatube.youtube.Channel.html] `html` must be a registry "
+                   "of raw html response strings (received value of type: "
+                   "<class 'int'> for key: 'featured_channels')")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_videos_html_errors(self):
         # bad type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "videos_html": 123})
-        err_msg = ("[Channel.html] `html` must be a registry of raw html "
-                   "response strings for the current channel (received value "
-                   "of type: <class 'int'> for key: 'videos')")
+        err_msg = ("[datatube.youtube.Channel.html] `html` must be a registry "
+                   "of raw html response strings (received value of type: "
+                   "<class 'int'> for key: 'videos')")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_workers_errors(self):
         # bad type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "workers": 1.5})
-        err_msg = ("[Channel.workers] `workers` must be an integer > 0 or "
+        err_msg = ("[datatube.youtube.Channel.workers] `workers` must be an integer > 0 or "
                    "None to use all available resources (received object of "
                    "type: <class 'float'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -227,7 +228,7 @@ class ChannelErrorTests(unittest.TestCase):
         # < 1
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES, "workers": 0})
-        err_msg = ("[Channel.workers] `workers` must be an integer > 0 or "
+        err_msg = ("[datatube.youtube.Channel.workers] `workers` must be an integer > 0 or "
                    "None to use all available resources (received: 0)")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -235,7 +236,7 @@ class ChannelErrorTests(unittest.TestCase):
         # bad type
         with self.assertRaises(TypeError) as err:
             Channel(**{**TEST_PROPERTIES, "target_dir": "abc"})
-        err_msg = ("[Channel.target_dir] `target_dir` must be a Path-like "
+        err_msg = ("[datatube.youtube.Channel.target_dir] `target_dir` must be a Path-like "
                    "object pointing to a directory on local storage in which "
                    "to store the contents of this channel (received object of "
                    "type: <class 'str'>)")
@@ -244,7 +245,7 @@ class ChannelErrorTests(unittest.TestCase):
         # points to file
         with self.assertRaises(ValueError) as err:
             Channel(**{**TEST_PROPERTIES, "target_dir": Path(__file__)})
-        err_msg = (f"[Channel.target_dir] `target_dir` must be a Path-like "
+        err_msg = (f"[datatube.youtube.Channel.target_dir] `target_dir` must be a Path-like "
                    f"object pointing to a directory on local storage in which "
                    f"to store the contents of this channel (path points to "
                    f"file: {Path(__file__)})")
@@ -373,7 +374,7 @@ class PytubeChannelTests(unittest.TestCase):
         self.assertTrue(isinstance(c.video_ids, list))
         self.assertTrue(len(c.video_ids) > 0)
         self.assertTrue(all(isinstance(v_id, str) for v_id in c.video_ids))
-        self.assertTrue(all(is_video_id(v_id) for v_id in c.video_ids))
+        self.assertTrue(all(check.is_video_id(v_id) for v_id in c.video_ids))
         self.assertEqual(c.last_updated.date(), datetime.now().date())
         self.assertTrue(isinstance(c.html["about"], str) and
                         len(c.html["about"]) > 0)

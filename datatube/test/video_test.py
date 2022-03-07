@@ -7,7 +7,8 @@ import unittest
 import pytube
 
 from datatube import DATATUBE_VERSION_NUMBER, ROOT_DIR, VIDEO_DIR
-from datatube.youtube import Channel, Video, is_url, video_id_to_url
+import datatube.check as check
+from datatube.youtube import Channel, Video, video_id_to_url
 
 
 TEST_VIDEO_ID = "dQw4w9WgXcQ"
@@ -129,7 +130,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad source type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "source": 123})
-        err_msg = ("[Video.source] `source` must be a string with one of "
+        err_msg = ("[datatube.youtube.Video.source] `source` must be a string with one of "
                    "the following values: ('local', 'pytube', 'sql') "
                    "(received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -137,7 +138,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad source value
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "source": "bad source value"})
-        err_msg = ("[Video.source] `source` must be a string with one of "
+        err_msg = ("[datatube.youtube.Video.source] `source` must be a string with one of "
                    "the following values: ('local', 'pytube', 'sql') "
                    "(received: 'bad source value')")
         self.assertEqual(str(err.exception), err_msg)
@@ -146,7 +147,7 @@ class VideoErrorTests(unittest.TestCase):
         v = Video(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             v.source = "something else"
-        err_msg = ("[Video.source] `source` cannot be changed outside of "
+        err_msg = ("[datatube.youtube.Video.source] `source` cannot be changed outside of "
                    "init.  Construct a new Video object instead")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -154,7 +155,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad video_id type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "video_id": 123})
-        err_msg = ("[Video.id] `id` must be a unique 11-character id string "
+        err_msg = ("[datatube.youtube.Video.id] `id` must be a unique 11-character id string "
                    "used by the YouTube backend to track videos (received "
                    "object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -162,7 +163,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad video_id length
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "video_id": "not11characters"})
-        err_msg = ("[Video.id] `id` must be a unique 11-character id string "
+        err_msg = ("[datatube.youtube.Video.id] `id` must be a unique 11-character id string "
                    "used by the YouTube backend to track videos (received: "
                    "'not11characters')")
         self.assertEqual(str(err.exception), err_msg)
@@ -171,21 +172,21 @@ class VideoErrorTests(unittest.TestCase):
         v = Video(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             v.id = "something else"
-        err_msg = "[Video.id] `id` cannot be changed outside of init"
+        err_msg = "[datatube.youtube.Video.id] `id` cannot be changed outside of init"
         self.assertEqual(str(err.exception), err_msg)
 
     def test_video_title_errors(self):
         # bad video_title type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "video_title": 123})
-        err_msg = ("[Video.title] `title` must be a non-empty string "
+        err_msg = ("[datatube.youtube.Video.title] `title` must be a non-empty string "
                    "(received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # title is empty string
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "video_title": ""})
-        err_msg = ("[Video.title] `title` must be a non-empty string "
+        err_msg = ("[datatube.youtube.Video.title] `title` must be a non-empty string "
                    "(received: '')")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -193,7 +194,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad publish_date type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "publish_date": 123})
-        err_msg = ("[Video.publish_date] `publish_date` must be a "
+        err_msg = ("[datatube.youtube.Video.publish_date] `publish_date` must be a "
                    "datetime.datetime object stating the last time this video "
                    "was checked for updates (received object of type: "
                    "<class 'int'>)")
@@ -202,16 +203,17 @@ class VideoErrorTests(unittest.TestCase):
         # publish_date in the future
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "publish_date": datetime(9999, 12, 31)})
-        err_msg = (f"[Video.publish_date] `publish_date` must be a "
+        err_msg = (f"[datatube.youtube.Video.publish_date] `publish_date` must be a "
                    f"datetime.datetime object stating the last time this video "
-                   f"was checked for updates ({datetime(9999, 12, 31)} > ")
+                   f"was checked for updates (timestamp in the future: "
+                   f"{datetime(9999, 12, 31)} > ")
         self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
     def test_last_updated_errors(self):
         # bad last_updated type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "last_updated": 123})
-        err_msg = ("[Video.last_updated] `last_updated` must be a "
+        err_msg = ("[datatube.youtube.Video.last_updated] `last_updated` must be a "
                    "datetime.datetime object stating the last time this "
                    "video was checked for updates (received object of type: "
                    "<class 'int'>)")
@@ -220,17 +222,17 @@ class VideoErrorTests(unittest.TestCase):
         # in the future
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "last_updated": datetime(9999, 12, 31)})
-        err_msg = (f"[Video.last_updated] `last_updated` must be a "
+        err_msg = (f"[datatube.youtube.Video.last_updated] `last_updated` must be a "
                    f"datetime.datetime object stating the last time this "
-                   f"video was checked for updates ({datetime(9999, 12, 31)} "
-                   f"> ")
+                   f"video was checked for updates (timestamp in the future: "
+                   f"{datetime(9999, 12, 31)} > ")
         self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
         # assignment outside init
         v = Video(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             v.last_updated = datetime.now()
-        err_msg = ("[Video.last_updated] `last_updated` cannot be changed "
+        err_msg = ("[datatube.youtube.Video.last_updated] `last_updated` cannot be changed "
                    "outside of init")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -238,7 +240,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad duration type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "duration": 123})
-        err_msg = ("[Video.duration] `duration` must be a datetime.timedelta "
+        err_msg = ("[datatube.youtube.Video.duration] `duration` must be a datetime.timedelta "
                    "object describing the duration of the video (received "
                    "object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -246,7 +248,7 @@ class VideoErrorTests(unittest.TestCase):
         # negative duration
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "duration": timedelta(seconds=-1)})
-        err_msg = (f"[Video.duration] `duration` must be a datetime.timedelta "
+        err_msg = (f"[datatube.youtube.Video.duration] `duration` must be a datetime.timedelta "
                    f"object describing the duration of the video "
                    f"({timedelta(seconds=-1)} < {timedelta()})")
         self.assertEqual(str(err.exception), err_msg)
@@ -255,7 +257,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad views type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "views": "abc"})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('views' must be "
                    "an integer, received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -263,7 +265,7 @@ class VideoErrorTests(unittest.TestCase):
         # negative views
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "views": -1})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('views' must be "
                    ">= 0, received: -1)")
         self.assertEqual(str(err.exception), err_msg)
@@ -271,7 +273,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad rating type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "rating": "abc"})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('rating' must be "
                    "an integer or float, received object of type: "
                    "<class 'str'>)")
@@ -280,7 +282,7 @@ class VideoErrorTests(unittest.TestCase):
         # negative rating
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "rating": -0.1})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('rating' must be "
                    "between 0 and 5, received: -0.1)")
         self.assertEqual(str(err.exception), err_msg)
@@ -288,7 +290,7 @@ class VideoErrorTests(unittest.TestCase):
         # rating > 5
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "rating": 5.5})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('rating' must be "
                    "between 0 and 5, received: 5.5)")
         self.assertEqual(str(err.exception), err_msg)
@@ -296,7 +298,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad likes type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "likes": "abc"})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('likes' must be "
                    "an integer, received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -304,7 +306,7 @@ class VideoErrorTests(unittest.TestCase):
         # negative likes
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "likes": -1})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('likes' must be "
                    ">= 0, received: -1)")
         self.assertEqual(str(err.exception), err_msg)
@@ -312,7 +314,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad likes type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "dislikes": "abc"})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('dislikes' must "
                    "be an integer, received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -320,7 +322,7 @@ class VideoErrorTests(unittest.TestCase):
         # negative likes
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "dislikes": -1})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video ('dislikes' must "
                    "be >= 0, received: -1)")
         self.assertEqual(str(err.exception), err_msg)
@@ -340,7 +342,7 @@ class VideoErrorTests(unittest.TestCase):
         # not enough info to compute rating
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "rating": None, "dislikes": None})
-        err_msg = ("[Video.stats] `stats` must be a dictionary containing the "
+        err_msg = ("[datatube.youtube.Video.stats] `stats` must be a dictionary containing the "
                    "view and rating statistics of the video (not enough "
                    "information to compute rating: no 'rating' entry and no "
                    "'likes' and 'dislikes' to compute it)")
@@ -350,7 +352,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad description type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "description": 123})
-        err_msg = ("[Video.description] `description` must be a string "
+        err_msg = ("[datatube.youtube.Video.description] `description` must be a string "
                    "containing the video's description (received object of "
                    "type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -359,7 +361,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad keywords type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "keywords": "abc"})
-        err_msg = ("[Video.keywords] `keywords` must be a list, tuple, or set "
+        err_msg = ("[datatube.youtube.Video.keywords] `keywords` must be a list, tuple, or set "
                    "of keyword strings associated with this video (received "
                    "object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -367,7 +369,7 @@ class VideoErrorTests(unittest.TestCase):
         # keyword is not string
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "keywords": ["abc", "def", 123]})
-        err_msg = ("[Video.keywords] `keywords` must be a list, tuple, or set "
+        err_msg = ("[datatube.youtube.Video.keywords] `keywords` must be a list, tuple, or set "
                    "of keyword strings associated with this video (received "
                    "keyword of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -375,7 +377,7 @@ class VideoErrorTests(unittest.TestCase):
         # keyword is empty string
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "keywords": ["abc", "def", ""]})
-        err_msg = ("[Video.keywords] `keywords` must be a list, tuple, or set "
+        err_msg = ("[datatube.youtube.Video.keywords] `keywords` must be a list, tuple, or set "
                    "of keyword strings associated with this video (received "
                    "empty keyword: '')")
         self.assertEqual(str(err.exception), err_msg)
@@ -384,7 +386,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad thumbnail_url type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "thumbnail_url": 123})
-        err_msg = ("[Video.thumbnail_url] `thumbnail_url` must be a url "
+        err_msg = ("[datatube.youtube.Video.thumbnail_url] `thumbnail_url` must be a url "
                    "string pointing to the thumbnail image used for this "
                    "video (received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -393,7 +395,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad target_dir type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "target_dir": "abc"})
-        err_msg = ("[Video.target_dir] `target_dir` must be a Path-like "
+        err_msg = ("[datatube.youtube.Video.target_dir] `target_dir` must be a Path-like "
                    "object pointing to a directory on local storage in which "
                    "to store the contents of this video (received object of "
                    "type: <class 'str'>)")
@@ -402,7 +404,7 @@ class VideoErrorTests(unittest.TestCase):
         # target_dir points to file
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "target_dir": Path(__file__)})
-        err_msg = (f"[Video.target_dir] `target_dir` must be a Path-like "
+        err_msg = (f"[datatube.youtube.Video.target_dir] `target_dir` must be a Path-like "
                    f"object pointing to a directory on local storage in which "
                    f"to store the contents of this video (path points to file: "
                    f"{Path(__file__)})")
@@ -412,7 +414,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad streams type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "streams": "abc"})
-        err_msg = ("[Video.streams] `streams` must be a pytube.StreamQuery "
+        err_msg = ("[datatube.youtube.Video.streams] `streams` must be a pytube.StreamQuery "
                    "object or None if the video has no streams (received "
                    "object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -426,7 +428,7 @@ class VideoErrorTests(unittest.TestCase):
         v = Video(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             v.streams = pytube.StreamQuery([])
-        err_msg = ("[Video.streams] `streams` cannot be changed outside of "
+        err_msg = ("[datatube.youtube.Video.streams] `streams` cannot be changed outside of "
                    "init")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -434,7 +436,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad captions type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "captions": 123})
-        err_msg = ("[Video.captions] `captions` must be a pytube.CaptionQuery "
+        err_msg = ("[datatube.youtube.Video.captions] `captions` must be a pytube.CaptionQuery "
                    "object or None if the video has no captions (received "
                    "object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -448,7 +450,7 @@ class VideoErrorTests(unittest.TestCase):
         v = Video(**{**TEST_PROPERTIES})
         with self.assertRaises(AttributeError) as err:
             v.captions = pytube.CaptionQuery([])
-        err_msg = ("[Video.captions] `captions` cannot be changed outside of "
+        err_msg = ("[datatube.youtube.Video.captions] `captions` cannot be changed outside of "
                    "init")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -456,7 +458,7 @@ class VideoErrorTests(unittest.TestCase):
         # bad channel type
         with self.assertRaises(TypeError) as err:
             Video(**{**TEST_PROPERTIES, "channel": 123})
-        err_msg = ("[Video.channel] `channel` must be a Channel object "
+        err_msg = ("[datatube.youtube.Video.channel] `channel` must be a Channel object "
                    "pointing to the owner of this video (received object of "
                    "type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
@@ -479,7 +481,7 @@ class VideoErrorTests(unittest.TestCase):
         }
         with self.assertRaises(ValueError) as err:
             Video(**{**TEST_PROPERTIES, "channel": Channel(**test_channel)})
-        err_msg = (f"[Video.channel] `channel` must be a Channel object "
+        err_msg = (f"[datatube.youtube.Video.channel] `channel` must be a Channel object "
                    f"pointing to the owner of this video (channel does not own "
                    f"this video: '{TEST_PROPERTIES['video_id']}' not in "
                    f"['NeOBvwRfBWc', 'QltYNmVUvh0', 'SYQJPkiNJfE', "
@@ -568,7 +570,7 @@ class PytubeVideoTests(unittest.TestCase):
                         len(v.keywords) > 0 and
                         all(isinstance(kw, str) for kw in v.keywords))
         self.assertTrue(isinstance(v.thumbnail_url, str) and
-                        is_url(v.thumbnail_url))
+                        check.is_url(v.thumbnail_url))
         self.assertEqual(v.target_dir, Path(VIDEO_DIR, TEST_CHANNEL_ID, v.id))
         self.assertTrue(len(v.streams) > 0)
         self.assertTrue(len(v.captions) > 0)
@@ -594,7 +596,7 @@ class PytubeVideoTests(unittest.TestCase):
                         len(v.keywords) > 0 and
                         all(isinstance(kw, str) for kw in v.keywords))
         self.assertTrue(isinstance(v.thumbnail_url, str) and
-                        is_url(v.thumbnail_url))
+                        check.is_url(v.thumbnail_url))
         self.assertEqual(v.target_dir, Path(v.channel.target_dir, v.id))
         self.assertTrue(len(v.streams) > 0)
         self.assertTrue(len(v.captions) > 0)

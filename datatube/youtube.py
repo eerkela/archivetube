@@ -14,36 +14,15 @@ import pytube
 from tqdm import tqdm
 import validators
 
-from datatube import DATATUBE_VERSION_NUMBER, VIDEO_DIR
+from datatube import DATATUBE_VERSION_NUMBER, VIDEO_DIR, AVAILABLE_SOURCES
 from datatube.error import error_trace
+import datatube.check as check
 
 
 """
 TODO: write an automatic retry method using expressvpn proxies
 TODO: write a Stats container for video view/rating statistics
 """
-
-
-AVAILABLE_SOURCES = ("local", "pytube", "sql")
-
-
-def is_channel_id(string: str) -> bool:
-    return len(string) == 24 and string.startswith("UC")
-
-
-def is_readable(path: Path) -> bool:
-    return path.is_dir() and len(path.glob("info.json")) > 0
-
-
-def is_url(string: str) -> bool:
-    result = validators.url(string)
-    if isinstance(result, validators.ValidationFailure):
-        return False
-    return True
-
-
-def is_video_id(string: str) -> bool:
-    return len(string) == 11
 
 
 def channel_id_to_url(channel_id: str) -> str:
@@ -102,7 +81,7 @@ class Channel:
                        f"Path-like object (received object of type: "
                        f"{type(channel_path)})")
             raise TypeError(err_msg)
-        if not is_readable(channel_path):
+        if not check.is_readable(channel_path):
             err_msg = (f"[{error_trace(cls)}] `channel_path` either does not "
                        f"exist, is not a directory, or has no info.json file: "
                        f"{channel_path}")
@@ -110,7 +89,7 @@ class Channel:
         with Path(channel_path, "info.json").open("r") as info_file:
             saved = json.load(info_file)
         dir_contents = tqdm(channel_path.iterdir(), leave=False)
-        video_ids = {d.name: d for d in dir_contents if is_readable(d)}
+        video_ids = {d.name: d for d in dir_contents if check.is_readable(d)}
         return cls(source="local",
                    channel_id=saved["id"],
                    channel_name=saved["name"],
@@ -130,7 +109,7 @@ class Channel:
                        f"(received object of type: {type(channel_url)})")
             raise TypeError(err_msg)
         channel_url = channel_url.strip()
-        if not is_url(channel_url):
+        if not check.is_url(channel_url):
             err_msg = (f"[{error_trace(cls)}] `channel_url` must be a valid "
                        f"url (received: {repr(channel_url)})")
             raise ValueError(err_msg)
@@ -170,24 +149,15 @@ class Channel:
 
     @html.setter
     def html(self, new_html_dict: dict[str, str]) -> None:
-        result = {
+        err_msg = "`html` must be a registry of raw html response strings"
+        check.channel_html(new_html_dict, err_msg)
+        self._html = {
             "about": "",
             "community": "",
             "featured_channels": "",
-            "videos": ""
+            "videos": "",
+            **new_html_dict
         }
-        err_msg = (f"[{error_trace(self)}] `html` must be a registry of raw "
-                   f"html response strings for the current channel")
-        for k, v in new_html_dict.items():
-            if not isinstance(k, str):
-                context = f"(received key of type: {type(k)})"
-                raise TypeError(f"{err_msg} {context}")
-            if not isinstance(v, str):
-                context = (f"(received value of type: {type(v)} for key: "
-                           f"{repr(k)})")
-                raise TypeError(f"{err_msg} {context}")
-            result[k] = v
-        self._html = result
 
     @property
     def id(self) -> str:
@@ -196,19 +166,13 @@ class Channel:
     @id.setter
     def id(self, new_id: str) -> None:
         if hasattr(self, "_id"):
-            err_msg = (f"[{error_trace(self)}] `id` cannot be changed outside "
+            err_msg = (f"[{error_trace()}] `id` cannot be changed outside "
                        f"of init")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `id` must be a unique 24-character "
-                   f"ExternalId starting with 'UC', which is used by the "
-                   f"YouTube backend to track channels")
-        if not isinstance(new_id, str):
-            context = (f"(received object of type: {type(new_id)})")
-            raise TypeError(f"{err_msg} {context}")
-        if len(new_id) != 24 or not new_id.startswith("UC"):
-            context = (f"(received: {repr(new_id)})")
-            raise ValueError(f"{err_msg} {context}")
-        self._id = new_id
+        err_msg = ("`id` must be a unique, 24-character ExternalId starting "
+                   "with 'UC', which is used by the YouTube backend to track "
+                   "channels")
+        self._id = check.channel_id(new_id, err_msg)
 
     @property
     def last_updated(self) -> datetime:
@@ -217,19 +181,12 @@ class Channel:
     @last_updated.setter
     def last_updated(self, new_timestamp: datetime) -> None:
         if hasattr(self, "_last_updated"):
-            err_msg = (f"[{error_trace(self)}] `last_updated` cannot be "
+            err_msg = (f"[{error_trace()}] `last_updated` cannot be "
                        f"changed outside of init")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `last_updated` must be a "
-                   f"datetime.datetime object stating the last time this "
-                   f"channel was checked for updates")
-        if not isinstance(new_timestamp, datetime):
-            context = f"(received object of type: {type(new_timestamp)})"
-            raise TypeError(f"{err_msg} {context}")
-        if new_timestamp > datetime.now():
-            context = f"({new_timestamp} > {datetime.now()})"
-            raise ValueError(f"{err_msg} {context}")
-        self._last_updated = new_timestamp
+        err_msg = ("`last_updated` must be a datetime.datetime object stating "
+                   "the last time this channel was checked for updates")
+        self._last_updated = check.timestamp(new_timestamp, err_msg)
 
     @property
     def name(self) -> str:
@@ -237,14 +194,8 @@ class Channel:
 
     @name.setter
     def name(self, new_name: str) -> None:
-        err_msg = f"[{error_trace(self)}] `name` must be a non-empty string"
-        if not isinstance(new_name, str):
-            context = f"(received object of type: {type(new_name)})"
-            raise TypeError(f"{err_msg} {context}")
-        if not new_name:  # channel_name is empty string
-            context = f"(received: {repr(new_name)})"
-            raise ValueError(f"{err_msg} {context}")
-        self._name = new_name
+        err_msg = "`name` must be a non-empty string"
+        self._name = check.str_not_empty(new_name, err_msg)
 
     @property
     def source(self) -> str:
@@ -253,19 +204,13 @@ class Channel:
     @source.setter
     def source(self, new_source: str) -> None:
         if hasattr(self, "_source"):
-            err_msg = (f"[{error_trace(self)}] `source` cannot be changed "
+            err_msg = (f"[{error_trace()}] `source` cannot be changed "
                        f"outside of init.  Construct a new Channel object "
                        f"instead")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `source` must be a string with one "
-                   f"of the following values: {repr(AVAILABLE_SOURCES)}")
-        if not isinstance(new_source, str):
-            context = f"(received object of type: {type(new_source)})"
-            raise TypeError(f"{err_msg} {context}")
-        if new_source not in AVAILABLE_SOURCES:
-            context = f"(received: {repr(new_source)})"
-            raise ValueError(f"{err_msg} {context}")
-        self._source = new_source
+        err_msg = (f"`source` must be a string with one of the following "
+                   f"values: {repr(AVAILABLE_SOURCES)}")
+        self._source = check.source(new_source, err_msg)
 
     @property
     def target_dir(self) -> Path:
@@ -273,16 +218,10 @@ class Channel:
 
     @target_dir.setter
     def target_dir(self, new_dir: Path) -> None:
-        err_msg = (f"[{error_trace(self)}] `target_dir` must be a Path-like "
-                   f"object pointing to a directory on local storage in which "
-                   f"to store the contents of this channel")
-        if not isinstance(new_dir, Path):
-            context = f"(received object of type: {type(new_dir)})"
-            raise TypeError(f"{err_msg} {context}")
-        if new_dir.exists() and not new_dir.is_dir():
-            context = f"(path points to file: {new_dir})"
-            raise ValueError(f"{err_msg} {context}")
-        self._target_dir = new_dir
+        err_msg = ("`target_dir` must be a Path-like object pointing to a "
+                   "directory on local storage in which to store the contents "
+                   "of this channel")
+        self._target_dir = check.target_dir(new_dir, err_msg)
 
     @property
     def video_ids(self) -> list[str | Path]:
@@ -290,37 +229,22 @@ class Channel:
 
     @video_ids.setter
     def video_ids(self, new_ids: list[str] | tuple[str] | set[str]) -> None:
-        err_msg = (f"[{error_trace(self)}] `video_ids` must be a list, tuple, "
-                   f"or set of 11-character video ids used by the YouTube "
-                   f"backend to track videos")
-        if not isinstance(new_ids, (list, tuple, set)):
-            context = f"(received object of type: {type(new_ids)})"
-            raise TypeError(f"{err_msg} {context}")
-        for video_id in new_ids:
-            if not isinstance(video_id, str):
-                context = f"(received id of type: {type(video_id)})"
-                raise TypeError(f"{err_msg} {context}")
-            if not is_video_id(video_id):
-                context = f"(encountered malformed video id: {repr(video_id)})"
-                raise ValueError(f"{err_msg} {context}")
-        self._video_ids = new_ids
+        err_msg = ("`video_ids` must be a list, tuple, or set of 11-character "
+                   "video ids used by the YouTube backend to track videos")
+        self._video_ids = check.video_id_list(new_ids, err_msg)
 
     @property
     def workers(self) -> int:
         return self._workers
 
     @workers.setter
-    def workers(self, new_workers: int) -> None:
-        err_msg = (f"[{error_trace(self)}] `workers` must be an integer > 0 "
-                   f"or None to use all available resources")
+    def workers(self, new_workers: int | None) -> None:
+        err_msg = ("`workers` must be an integer > 0 or None to use all "
+                   "available resources")
         if new_workers is not None:
-            if not isinstance(new_workers, int):
-                context = f"(received object of type: {type(new_workers)})"
-                raise TypeError(f"{err_msg} {context}")
-            if new_workers <= 0:
-                context = f"(received: {new_workers})"
-                raise ValueError(f"{err_msg} {context}")
-        self._workers = new_workers
+            self._workers = check.positive_int(new_workers, err_msg)
+        else:
+            self._workers = None
 
     #######################
     ####    METHODS    ####
@@ -375,12 +299,12 @@ class Channel:
         }
         if json_path:
             if not isinstance(json_path, Path):
-                err_msg = (f"[{error_trace(self)}] if provided, `json_path` "
+                err_msg = (f"[{error_trace()}] if provided, `json_path` "
                            f"must be a Path-like object describing where to "
                            f"save the json dictionary")
                 raise TypeError(err_msg)
             if json_path.suffix != ".json":
-                err_msg = (f"[{error_trace(self)}] `json_path` must end with "
+                err_msg = (f"[{error_trace()}] `json_path` must end with "
                            f"must end with '.json' extension: {json_path}")
                 raise ValueError(err_msg)
             json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -484,6 +408,7 @@ class Channel:
         return f"[{self.last_updated}] {self.name} ({self.__len__()})"
 
 
+
 class Video:
 
     def __init__(self,
@@ -545,7 +470,7 @@ class Video:
                        f"local storage (received object of type: "
                        f"{type(video_path)})")
             raise TypeError(err_msg)
-        if not is_readable(video_path):
+        if not check.is_readable(video_path):
             err_msg = (f"[{error_trace(cls)}] `video_path` is not readable "
                        f"(does not exist, is not a directory, or has no "
                        f"info.json file): {video_path}")
@@ -588,7 +513,7 @@ class Video:
             err_msg = (f"[{error_trace(cls)}] `video_url` must be a url "
                        f"string (received object of type: {type(video_url)})")
             raise TypeError(err_msg)
-        if not is_url(video_url):
+        if not check.is_url(video_url):
             err_msg = (f"[{error_trace(cls)}] `video_url` is not a valid url "
                        f"(received: {repr(video_url)})")
             raise ValueError(err_msg)
@@ -661,16 +586,16 @@ class Video:
     @captions.setter
     def captions(self, new_captions: pytube.CaptionQuery | None) -> None:
         if hasattr(self, "_captions"):
-            err_msg = (f"[{error_trace(self)}] `captions` cannot be changed "
+            err_msg = (f"[{error_trace()}] `captions` cannot be changed "
                        f"outside of init")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `captions` must be a "
-                   f"pytube.CaptionQuery object or None if the video has no "
-                   f"captions")
         if new_captions is not None:
+            trace = f"[{error_trace()}]"
+            err_msg = ("`captions` must be a pytube.CaptionQuery object or "
+                       "None if the video has no captions")
             if not isinstance(new_captions, pytube.CaptionQuery):
                 context = f"(received object of type: {type(new_captions)})"
-                raise TypeError(f"{err_msg} {context}")
+                raise TypeError(f"{trace} {err_msg} {context}")
             self._captions = new_captions
         else:
             self._captions = pytube.CaptionQuery([])
@@ -681,7 +606,7 @@ class Video:
 
     @channel.setter
     def channel(self, new_channel: Channel | None) -> None:
-        err_msg = (f"[{error_trace(self)}] `channel` must be a Channel object "
+        err_msg = (f"[{error_trace()}] `channel` must be a Channel object "
                    f"pointing to the owner of this video")
         if new_channel is not None:
             if not isinstance(new_channel, Channel):
@@ -705,11 +630,12 @@ class Video:
 
     @description.setter
     def description(self, new_description: str) -> None:
-        err_msg = (f"[{error_trace(self)}] `description` must be a string "
-                   f"containing the video's description")
+        trace = f"[{error_trace()}]"
+        err_msg = ("`description` must be a string containing the video's "
+                   "description")
         if not isinstance(new_description, str):
             context = f"(received object of type: {type(new_description)})"
-            raise TypeError(f"{err_msg} {context}")
+            raise TypeError(f"{trace} {err_msg} {context}")
         self._description = new_description
 
     @property
@@ -718,16 +644,9 @@ class Video:
 
     @duration.setter
     def duration(self, new_duration: timedelta) -> None:
-        err_msg = (f"[{error_trace(self)}] `duration` must be a "
-                   f"datetime.timedelta object describing the duration of the "
-                   f"video")
-        if not isinstance(new_duration, timedelta):
-            context = f"(received object of type: {type(new_duration)})"
-            raise TypeError(f"{err_msg} {context}")
-        if new_duration < timedelta():
-            context = f"({new_duration} < {timedelta()})"
-            raise ValueError(f"{err_msg} {context}")
-        self._duration = new_duration
+        err_msg = ("`duration` must be a datetime.timedelta object describing "
+                   "the duration of the video")
+        self._duration = check.duration(new_duration, err_msg)
 
     @property
     def id(self) -> str:
@@ -736,18 +655,12 @@ class Video:
     @id.setter
     def id(self, new_id: str) -> None:
         if hasattr(self, "_id"):
-            err_msg = (f"[{error_trace(self)}] `id` cannot be changed outside "
+            err_msg = (f"[{error_trace()}] `id` cannot be changed outside "
                        f"of init")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `id` must be a unique 11-character "
-                   f"id string used by the YouTube backend to track videos")
-        if not isinstance(new_id, str):
-            context = f"(received object of type: {type(new_id)})"
-            raise TypeError(f"{err_msg} {context}")
-        if not is_video_id(new_id):
-            context = f"(received: {repr(new_id)})"
-            raise ValueError(f"{err_msg} {context}")
-        self._id = new_id
+        err_msg = ("`id` must be a unique 11-character id string used by the "
+                   "YouTube backend to track videos")
+        self._id = check.video_id(new_id, err_msg)
 
     @property
     def keywords(self) -> list[str]:
@@ -755,7 +668,7 @@ class Video:
 
     @keywords.setter
     def keywords(self, new_keywords: list[str] | tuple[str] | set[str]) -> None:
-        err_msg = (f"[{error_trace(self)}] `keywords` must be a list, tuple, "
+        err_msg = (f"[{error_trace()}] `keywords` must be a list, tuple, "
                    f"or set of keyword strings associated with this video")
         if not isinstance(new_keywords, (list, tuple, set)):
             context = f"(received object of type: {type(new_keywords)})"
@@ -776,20 +689,13 @@ class Video:
     @last_updated.setter
     def last_updated(self, new_date: datetime) -> None:
         if hasattr(self, "_last_updated"):
-            err_msg = (f"[{error_trace(self)}] `last_updated` cannot be "
+            err_msg = (f"[{error_trace()}] `last_updated` cannot be "
                        f"changed outside of init")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `last_updated` must be a "
-                   f"datetime.datetime object stating the last time this "
-                   f"video was checked for updates")
-        if not isinstance(new_date, datetime):
-            context = f"(received object of type: {type(new_date)})"
-            raise TypeError(f"{err_msg} {context}")
-        current_time = datetime.now()
-        if new_date > current_time:
-            context = f"({new_date} > {current_time})"
-            raise ValueError(f"{err_msg} {context}")
-        self._last_updated = new_date
+        err_msg = ("`last_updated` must be a "
+                   "datetime.datetime object stating the last time this "
+                   "video was checked for updates")
+        self._last_updated = check.timestamp(new_date, err_msg)
 
     @property
     def publish_date(self) -> str:
@@ -797,16 +703,9 @@ class Video:
 
     @publish_date.setter
     def publish_date(self, new_date: datetime) -> None:
-        err_msg = (f"[{error_trace(self)}] `publish_date` must be a "
-                   f"datetime.datetime object stating the last time this "
-                   f"video was checked for updates")
-        if not isinstance(new_date, datetime):
-            context = f"(received object of type: {type(new_date)})"
-            raise TypeError(f"{err_msg} {context}")
-        if new_date > datetime.now():
-            context = f"({str(new_date)} > {str(datetime.now())})"
-            raise ValueError(f"{err_msg} {context}")
-        self._publish_date = new_date
+        err_msg = ("`publish_date` must be a datetime.datetime object stating "
+                   "the last time this video was checked for updates")
+        self._publish_date = check.timestamp(new_date, err_msg)
 
     @property
     def source(self) -> str:
@@ -815,26 +714,13 @@ class Video:
     @source.setter
     def source(self, new_source: str) -> None:
         if hasattr(self, "_source"):
-            err_msg = (f"[{error_trace(self)}] `source` cannot be changed "
+            err_msg = (f"[{error_trace()}] `source` cannot be changed "
                        f"outside of init.  Construct a new Video object "
                        f"instead")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `source` must be a string with one "
-                   f"of the following values: {repr(AVAILABLE_SOURCES)}")
-        if not isinstance(new_source, str):
-            context = f"(received object of type: {type(new_source)})"
-            raise TypeError(f"{err_msg} {context}")
-        if new_source not in AVAILABLE_SOURCES:
-            context = f"(received: {repr(new_source)})"
-            raise ValueError(f"{err_msg} {context}")
-        if hasattr(self, "_source"):
-            old_source = getattr(self, "_source")
-            self._source = new_source
-            if self._source != old_source:
-                # TODO: update video information
-                raise NotImplementedError()
-        else:
-            self._source = new_source
+        err_msg = (f"`source` must be a string with one of the following "
+                   f"values: {repr(AVAILABLE_SOURCES)}")
+        self._source = check.source(new_source, err_msg)
 
     @property
     def stats(self) -> dict[str, int | float]:
@@ -842,7 +728,7 @@ class Video:
 
     @stats.setter
     def stats(self, new_stats: dict[str, int | float]) -> None:
-        err_msg = (f"[{error_trace(self)}] `stats` must be a dictionary "
+        err_msg = (f"[{error_trace()}] `stats` must be a dictionary "
                    f"containing the view and rating statistics of the video")
         if not isinstance(new_stats, dict):
             context = f"(received object of type: {type(new_stats)})"
@@ -891,13 +777,13 @@ class Video:
     @streams.setter
     def streams(self, new_streams: pytube.StreamQuery | None) -> None:
         if hasattr(self, "_streams"):
-            err_msg = (f"[{error_trace(self)}] `streams` cannot be changed "
+            err_msg = (f"[{error_trace()}] `streams` cannot be changed "
                        f"outside of init")
             raise AttributeError(err_msg)
-        err_msg = (f"[{error_trace(self)}] `streams` must be a "
-                   f"pytube.StreamQuery object or None if the video has no "
-                   f"streams")
         if new_streams is not None:
+            err_msg = (f"[{error_trace()}] `streams` must be a "
+                       f"pytube.StreamQuery object or None if the video has "
+                       f"no streams")
             if not isinstance(new_streams, pytube.StreamQuery):
                 context = f"(received object of type: {type(new_streams)})"
                 raise TypeError(f"{err_msg} {context}")
@@ -911,16 +797,10 @@ class Video:
 
     @target_dir.setter
     def target_dir(self, new_dir: Path) -> None:
-        err_msg = (f"[{error_trace(self)}] `target_dir` must be a Path-like "
-                   f"object pointing to a directory on local storage in which "
-                   f"to store the contents of this video")
-        if not isinstance(new_dir, Path):
-            context = f"(received object of type: {type(new_dir)})"
-            raise TypeError(f"{err_msg} {context}")
-        if new_dir.exists() and new_dir.is_file():
-            context = f"(path points to file: {new_dir})"
-            raise ValueError(f"{err_msg} {context}")
-        self._target_dir = new_dir
+        err_msg = ("`target_dir` must be a Path-like object pointing to a "
+                   "directory on local storage in which to store the contents "
+                   "of this video")
+        self._target_dir = check.target_dir(new_dir, err_msg)
 
     @property
     def thumbnail_url(self) -> str:
@@ -928,7 +808,7 @@ class Video:
 
     @thumbnail_url.setter
     def thumbnail_url(self, new_url: str) -> str:
-        err_msg = (f"[{error_trace(self)}] `thumbnail_url` must be a url "
+        err_msg = (f"[{error_trace()}] `thumbnail_url` must be a url "
                    f"string pointing to the thumbnail image used for this "
                    f"video")
         if not isinstance(new_url, str):
@@ -942,14 +822,8 @@ class Video:
 
     @title.setter
     def title(self, new_title: str) -> None:
-        err_msg = (f"[{error_trace(self)}] `title` must be a non-empty string")
-        if not isinstance(new_title, str):
-            context = f"(received object of type: {type(new_title)})"
-            raise TypeError(f"{err_msg} {context}")
-        if not new_title:  # new_title is empty string
-            context = f"(received: {repr(new_title)})"
-            raise ValueError(f"{err_msg} {context}")
-        self._title = new_title
+        err_msg = "`title` must be a non-empty string"
+        self._title = check.str_not_empty(new_title, err_msg)
 
     #######################
     ####    METHODS    ####
@@ -965,15 +839,15 @@ class Video:
                  caption_language: str = "en",
                  dry_run: bool = False):
         if self.source in ["local", "sql"]:
-            err_msg = (f"[{error_trace(self)}] cannot download a local or "
+            err_msg = (f"[{error_trace()}] cannot download a local or "
                        f"sql-based video object: {repr(self.id)}")
             raise RuntimeError(err_msg)
         if len(self.streams) == 0:
-            err_msg = (f"[{error_trace(self)}] video has no available streams "
+            err_msg = (f"[{error_trace()}] video has no available streams "
                        f"to download: {repr(self.id)}")
             raise RuntimeError(err_msg)
         if self.target_dir is None and to is None:
-            err_msg = (f"[{error_trace(self)}] no target directory to "
+            err_msg = (f"[{error_trace()}] no target directory to "
                        f"download to (`self.target_dir` and `to` are both "
                        f"None): {repr(self.id)}")
             raise RuntimeError(err_msg)
@@ -1048,12 +922,12 @@ class Video:
         }
         if json_path:
             if not isinstance(json_path, Path):
-                err_msg = (f"[{error_trace(self)}] if provided, `json_path` "
+                err_msg = (f"[{error_trace()}] if provided, `json_path` "
                            f"must be a Path-like object describing where to "
                            f"save the json dictionary")
                 raise TypeError(err_msg)
             if json_path.suffix != ".json":
-                err_msg = (f"[{error_trace(self)}] `json_path` must end with "
+                err_msg = (f"[{error_trace()}] `json_path` must end with "
                            f"must end with '.json' extension: {json_path}")
                 raise ValueError(err_msg)
             json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1068,3 +942,6 @@ class Video:
 
     def __eq__(self, other: Video) -> bool:
         return self.id == other.id and self.last_updated == other.last_updated
+
+    def __hash__(self):
+        return hash(id(self))

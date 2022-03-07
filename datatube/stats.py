@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pandas.api.types as pdtypes
 
+from datatube.check import is_video_id
 from datatube.error import error_trace
-from datatube.youtube import is_video_id
 
 
 def check_dtypes(data: pd.DataFrame, **kwargs) -> bool:
@@ -69,7 +69,7 @@ class Stats:
         if data is not None:
             # check data is dataframe
             if not isinstance(data, pd.DataFrame):
-                err_msg = (f"[{error_trace(self)}] `data` must be a "
+                err_msg = (f"[{error_trace()}] `data` must be a "
                            f"pandas.DataFrame object (received object of "
                            f"type: {type(data)})")
                 raise TypeError(err_msg)
@@ -78,7 +78,7 @@ class Stats:
             if set(data.columns) != set(expected_columns):  # column mismatch
                 missing_columns = set(expected_columns) - set(data.columns)
                 extra_columns = set(data.columns) - set(expected_columns)
-                err_msg = (f"[{error_trace(self)}] columns of `data` do not "
+                err_msg = (f"[{error_trace()}] columns of `data` do not "
                            f"match expected")
                 if len(missing_columns) > 0 and len(extra_columns) > 0 :
                     context = (f"(missing columns: {repr(missing_columns)}, "
@@ -92,11 +92,11 @@ class Stats:
             # check column types and missing values match expected
             for col_name, (typespec, na_allowed) in expected_columns.items():
                 if not check_dtypes(data, **{col_name: typespec}):
-                    err_msg = (f"[{error_trace(self)}] column {repr(col_name)} "
+                    err_msg = (f"[{error_trace()}] column {repr(col_name)} "
                                f"must contain {typename_conv[typespec]} data")
                     raise TypeError(err_msg)
                 if not na_allowed and data[col_name].hasnans:
-                    err_msg = (f"[{error_trace(self)}] column {repr(col_name)} "
+                    err_msg = (f"[{error_trace()}] column {repr(col_name)} "
                                f"cannot contain missing values")
                     raise ValueError(err_msg)
 
@@ -153,7 +153,7 @@ class Stats:
                 likes: int | None = None,
                 dislikes: int | None = None) -> None:
         # video_id errors
-        err_msg = (f"[{error_trace(self)}] `video_id` must be an 11-character "
+        err_msg = (f"[{error_trace()}] `video_id` must be an 11-character "
                    f"video id string")
         if not isinstance(video_id, str):
             context = f"(received object of type: {type(video_id)})"
@@ -163,7 +163,7 @@ class Stats:
             raise ValueError(f"{err_msg} {context}")
 
         # timestamp errors
-        err_msg = (f"[{error_trace(self)}] `timestamp` must be a "
+        err_msg = (f"[{error_trace()}] `timestamp` must be a "
                    f"datetime.datetime object")
         if not isinstance(timestamp, datetime):
             context =  f"(received object of type: {type(timestamp)})"
@@ -174,7 +174,7 @@ class Stats:
             raise ValueError(f"{err_msg} {context}")
 
         # views errors
-        err_msg = f"[{error_trace(self)}] `views` must be an integer > 0"
+        err_msg = f"[{error_trace()}] `views` must be an integer > 0"
         if not isinstance(views, int):
             context = f"(received object of type: {type(views)})"
             raise TypeError(f"{err_msg} {context}")
@@ -184,7 +184,7 @@ class Stats:
 
         # rating errors
         if rating is not None:
-            err_msg = (f"[{error_trace(self)}] `rating` must be a numeric "
+            err_msg = (f"[{error_trace()}] `rating` must be a numeric "
                        f"between 0 and 5")
             if not isinstance(rating, (int, float)):
                 context = f"(received object of type: {type(rating)})"
@@ -196,7 +196,7 @@ class Stats:
         # likes + dislikes errors
         for k, v in {"likes": likes, "dislikes": dislikes}.items():
             if v is not None:
-                err_msg = f"[{error_trace(self)}] `{k}` must be an integer > 0"
+                err_msg = f"[{error_trace()}] `{k}` must be an integer > 0"
                 if not isinstance(v, int):
                     context = f"(received object of type: {type(v)})"
                     raise TypeError(f"{err_msg} {context}")
@@ -207,7 +207,7 @@ class Stats:
         # check if row already exists
         if ((self._data["video_id"] == video_id) &
             (self._data["timestamp"] == timestamp)).any():
-            err_msg = (f"[{error_trace(self)}] duplicate row (video_id: "
+            err_msg = (f"[{error_trace()}] duplicate row (video_id: "
                        f"{repr(video_id)}, timestamp: {timestamp})")
             raise ValueError(err_msg)
 
@@ -231,7 +231,7 @@ class Stats:
 
     def to_csv(self, csv_path: Path, *video_ids: str) -> None:
         # csv_path errors
-        err_msg = (f"[{error_trace(self)}] `csv_path` must be a Path-like "
+        err_msg = (f"[{error_trace()}] `csv_path` must be a Path-like "
                    f"object with a .csv file extension")
         if not isinstance(csv_path, Path):
             context = f"(received object of type: {type(csv_path)})"
@@ -241,7 +241,7 @@ class Stats:
             raise ValueError(f"{err_msg} {context}")
 
         # video_ids errors
-        err_msg = (f"[{error_trace(self)}] video_id must be an 11-character "
+        err_msg = (f"[{error_trace()}] video_id must be an 11-character "
                    f"id string")
         for v_id in video_ids:
             if not isinstance(v_id, str):

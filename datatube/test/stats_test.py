@@ -162,7 +162,7 @@ class StatsErrorTests(unittest.TestCase):
         # bad arg type
         with self.assertRaises(TypeError) as err:
             Stats(123)
-        err_msg = ("[Stats.__init__] `data` must be a pandas.DataFrame object "
+        err_msg = ("[datatube.stats.Stats.__init__] `data` must be a pandas.DataFrame object "
                    "(received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -170,7 +170,7 @@ class StatsErrorTests(unittest.TestCase):
         df = pd.DataFrame({**TEST_PROPERTIES, "extra_column": 0}, index=[0])
         with self.assertRaises(ValueError) as err:
             Stats(df)
-        err_msg = ("[Stats.__init__] columns of `data` do not match expected "
+        err_msg = ("[datatube.stats.Stats.__init__] columns of `data` do not match expected "
                    "(extra columns: {'extra_column'})")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -180,7 +180,7 @@ class StatsErrorTests(unittest.TestCase):
         df = pd.DataFrame(missing_column, index=[0])
         with self.assertRaises(ValueError) as err:
             Stats(df)
-        err_msg = ("[Stats.__init__] columns of `data` do not match expected "
+        err_msg = ("[datatube.stats.Stats.__init__] columns of `data` do not match expected "
                    "(missing columns: {'views'})")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -188,7 +188,7 @@ class StatsErrorTests(unittest.TestCase):
         df = pd.DataFrame({**missing_column, "extra_column": 0}, index=[0])
         with self.assertRaises(ValueError) as err:
             Stats(df)
-        err_msg = ("[Stats.__init__] columns of `data` do not match expected "
+        err_msg = ("[datatube.stats.Stats.__init__] columns of `data` do not match expected "
                    "(missing columns: {'views'}, extra columns: "
                    "{'extra_column'})")
         self.assertEqual(str(err.exception), err_msg)
@@ -197,14 +197,14 @@ class StatsErrorTests(unittest.TestCase):
         df = pd.DataFrame({**TEST_PROPERTIES, "video_id": 123}, index=[0])
         with self.assertRaises(TypeError) as err:
             Stats(df)
-        err_msg = "[Stats.__init__] column 'video_id' must contain string data"
+        err_msg = "[datatube.stats.Stats.__init__] column 'video_id' must contain string data"
         self.assertEqual(str(err.exception), err_msg)
 
         # bad timestamp data type
         df = pd.DataFrame({**TEST_PROPERTIES, "timestamp": 123}, index=[0])
         with self.assertRaises(TypeError) as err:
             Stats(df)
-        err_msg = ("[Stats.__init__] column 'timestamp' must contain datetime "
+        err_msg = ("[datatube.stats.Stats.__init__] column 'timestamp' must contain datetime "
                    "data")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -212,28 +212,28 @@ class StatsErrorTests(unittest.TestCase):
         df = pd.DataFrame({**TEST_PROPERTIES, "views": "abc"}, index=[0])
         with self.assertRaises(TypeError) as err:
             Stats(df)
-        err_msg = "[Stats.__init__] column 'views' must contain integer data"
+        err_msg = "[datatube.stats.Stats.__init__] column 'views' must contain integer data"
         self.assertEqual(str(err.exception), err_msg)
 
         # bad rating data type
         df = pd.DataFrame({**TEST_PROPERTIES, "rating": "abc"}, index=[0])
         with self.assertRaises(TypeError) as err:
             Stats(df)
-        err_msg = "[Stats.__init__] column 'rating' must contain numeric data"
+        err_msg = "[datatube.stats.Stats.__init__] column 'rating' must contain numeric data"
         self.assertEqual(str(err.exception), err_msg)
 
         # bad likes data type
         df = pd.DataFrame({**TEST_PROPERTIES, "likes": "abc"}, index=[0])
         with self.assertRaises(TypeError) as err:
             Stats(df)
-        err_msg = "[Stats.__init__] column 'likes' must contain integer data"
+        err_msg = "[datatube.stats.Stats.__init__] column 'likes' must contain integer data"
         self.assertEqual(str(err.exception), err_msg)
 
         # bad dislikes data type
         df = pd.DataFrame({**TEST_PROPERTIES, "dislikes": "abc"}, index=[0])
         with self.assertRaises(TypeError) as err:
             Stats(df)
-        err_msg = "[Stats.__init__] column 'dislikes' must contain integer data"
+        err_msg = "[datatube.stats.Stats.__init__] column 'dislikes' must contain integer data"
         self.assertEqual(str(err.exception), err_msg)
 
     # def test_from_csv_errors()
@@ -244,14 +244,14 @@ class StatsErrorTests(unittest.TestCase):
         # bad video_id type
         with self.assertRaises(TypeError) as err:
             s.add_row(**{**TEST_PROPERTIES, "video_id": 123})
-        err_msg = ("[Stats.add_row] `video_id` must be an 11-character video "
+        err_msg = ("[datatube.stats.Stats.add_row] `video_id` must be an 11-character video "
                    "id string (received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # bad video_id length
         with self.assertRaises(ValueError) as err:
             s.add_row(**{**TEST_PROPERTIES, "video_id": "not11characters"})
-        err_msg = ("[Stats.add_row] `video_id` must be an 11-character video "
+        err_msg = ("[datatube.stats.Stats.add_row] `video_id` must be an 11-character video "
                    "id string (received: 'not11characters')")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -261,14 +261,14 @@ class StatsErrorTests(unittest.TestCase):
         # bad timestamp type
         with self.assertRaises(TypeError) as err:
             s.add_row(**{**TEST_PROPERTIES, "timestamp": 123})
-        err_msg = ("[Stats.add_row] `timestamp` must be a datetime.datetime "
+        err_msg = ("[datatube.stats.Stats.add_row] `timestamp` must be a datetime.datetime "
                    "object (received object of type: <class 'int'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # in the future
         with self.assertRaises(ValueError) as err:
             s.add_row(**{**TEST_PROPERTIES, "timestamp": datetime(9999, 12, 31)})
-        err_msg = (f"[Stats.add_row] `timestamp` must be a datetime.datetime "
+        err_msg = (f"[datatube.stats.Stats.add_row] `timestamp` must be a datetime.datetime "
                    f"object (timestamp in the future: "
                    f"{datetime(9999, 12, 31)} > ")
         self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
@@ -279,14 +279,14 @@ class StatsErrorTests(unittest.TestCase):
         # bad views type
         with self.assertRaises(TypeError) as err:
             s.add_row(**{**TEST_PROPERTIES, "views": "abc"})
-        err_msg = ("[Stats.add_row] `views` must be an integer > 0 (received "
+        err_msg = ("[datatube.stats.Stats.add_row] `views` must be an integer > 0 (received "
                    "object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # negative views
         with self.assertRaises(ValueError) as err:
             s.add_row(**{**TEST_PROPERTIES, "views": -1})
-        err_msg = ("[Stats.add_row] `views` must be an integer > 0 (received: "
+        err_msg = ("[datatube.stats.Stats.add_row] `views` must be an integer > 0 (received: "
                    "-1)")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -296,21 +296,21 @@ class StatsErrorTests(unittest.TestCase):
         # bad rating type
         with self.assertRaises(TypeError) as err:
             s.add_row(**{**TEST_PROPERTIES, "rating": "abc"})
-        err_msg = ("[Stats.add_row] `rating` must be a numeric between 0 and 5 "
+        err_msg = ("[datatube.stats.Stats.add_row] `rating` must be a numeric between 0 and 5 "
                    "(received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # negative rating
         with self.assertRaises(ValueError) as err:
             s.add_row(**{**TEST_PROPERTIES, "rating": -1})
-        err_msg = ("[Stats.add_row] `rating` must be a numeric between 0 and 5 "
+        err_msg = ("[datatube.stats.Stats.add_row] `rating` must be a numeric between 0 and 5 "
                    "(received: -1)")
         self.assertEqual(str(err.exception), err_msg)
 
         # rating too high
         with self.assertRaises(ValueError) as err:
             s.add_row(**{**TEST_PROPERTIES, "rating": 5.3})
-        err_msg = ("[Stats.add_row] `rating` must be a numeric between 0 and 5 "
+        err_msg = ("[datatube.stats.Stats.add_row] `rating` must be a numeric between 0 and 5 "
                    "(received: 5.3)")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -320,14 +320,14 @@ class StatsErrorTests(unittest.TestCase):
         # bad likes type
         with self.assertRaises(TypeError) as err:
             s.add_row(**{**TEST_PROPERTIES, "likes": "abc"})
-        err_msg = ("[Stats.add_row] `likes` must be an integer > 0 (received "
+        err_msg = ("[datatube.stats.Stats.add_row] `likes` must be an integer > 0 (received "
                    "object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # negative likes
         with self.assertRaises(ValueError) as err:
             s.add_row(**{**TEST_PROPERTIES, "likes": -1})
-        err_msg = ("[Stats.add_row] `likes` must be an integer > 0 (received: "
+        err_msg = ("[datatube.stats.Stats.add_row] `likes` must be an integer > 0 (received: "
                    "-1)")
         self.assertEqual(str(err.exception), err_msg)
 
@@ -337,13 +337,13 @@ class StatsErrorTests(unittest.TestCase):
         # bad dislikes type
         with self.assertRaises(TypeError) as err:
             s.add_row(**{**TEST_PROPERTIES, "dislikes": "abc"})
-        err_msg = ("[Stats.add_row] `dislikes` must be an integer > 0 "
+        err_msg = ("[datatube.stats.Stats.add_row] `dislikes` must be an integer > 0 "
                    "(received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
 
         # negative dislikes
         with self.assertRaises(ValueError) as err:
             s.add_row(**{**TEST_PROPERTIES, "dislikes": -1})
-        err_msg = ("[Stats.add_row] `dislikes` must be an integer > 0 "
+        err_msg = ("[datatube.stats.Stats.add_row] `dislikes` must be an integer > 0 "
                    "(received: -1)")
         self.assertEqual(str(err.exception), err_msg)
