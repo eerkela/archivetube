@@ -12,7 +12,6 @@ from urllib.error import URLError
 
 import pytube
 from tqdm import tqdm
-import validators
 
 from datatube import DATATUBE_VERSION_NUMBER, VIDEO_DIR, AVAILABLE_SOURCES
 from datatube.error import error_trace
