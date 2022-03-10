@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+import reprlib
 from typing import Iterable, Iterator
 
 from datatube.error import error_trace
@@ -14,10 +15,10 @@ class ChannelInfo:
                  channel_id: str,
                  channel_name: str,
                  last_updated: datetime,
-                 about_html: str = "",
-                 community_html: str = "",
-                 featured_channels_html: str = "",
-                 videos_html: str = "",
+                 about_html: str,
+                 community_html: str,
+                 featured_channels_html: str,
+                 videos_html: str,
                  immutable: bool = False):
         if not isinstance(immutable, bool):
             err_msg = (f"[{error_trace()}] `immutable` must be a boolean "
@@ -122,9 +123,8 @@ class ChannelInfo:
             try:
                 new_html = ChannelInfo.HtmlDict(**new_html)
             except (TypeError, ValueError) as err:
-                context = (f"(could not convert base dictionary: "
-                           f"{repr(new_html)})")
-                raise type(err)(f"{err_msg} {context}") from err
+                context = (f"(could not convert base dictionary)")
+                raise ValueError(f"{err_msg} {context}") from err
         new_html._immutable = self._immutable
         self._html = new_html
 
@@ -148,23 +148,7 @@ class ChannelInfo:
                        f"equivalent information (received object of type: "
                        f"{type(other)})")
             raise TypeError(err_msg)
-        if isinstance(other, ChannelInfo):
-            return (self.channel_id == other.channel_id and
-                    self.channel_name == other.channel_name and
-                    self.last_updated == other.last_updated and
-                    self.html == other.html)
-            # return hash(self) == hash(other)
-        try:
-            return (self.channel_id == other["channel_id"] and
-                    self.channel_name == other["channel_name"] and
-                    self.last_updated == other["last_updated"] and
-                    self.html.about == other["html"]["about"] and
-                    self.html.community == other["html"]["community"] and
-                    self.html.featured_channels == \
-                        other["html"]["featured_channels"] and
-                    self.html.videos == other["html"]["videos"])
-        except KeyError:
-            return False
+        return tuple(self.items()) == tuple(other.items())
 
     def __getitem__(self, key: str):
         if not isinstance(key, str):
@@ -177,10 +161,34 @@ class ChannelInfo:
         return getattr(self, key)
 
     def __hash__(self) -> int:
-        return hash(self.keys())
+        if not self._immutable:
+            err_msg = (f"[{error_trace()}] ChannelInfo object cannot be "
+                       f"hashed: instance must be immutable")
+            raise TypeError(err_msg)  # hash(mutable) always throws TypeError
+        return hash(self.values())
 
     def __iter__(self) -> Iterable[str]:
         yield from self.keys()
+
+    def __repr__(self) -> str:
+        fields = {
+            "channel_id": self.channel_id,
+            "channel_name": self.channel_name,
+            "last_updated": self.last_updated,
+            "about_html": self.html["about"],
+            "community_html": self.html["community"],
+            "featured_channels_html": self.html["featured_channels"],
+            "videos_html": self.html["videos"],
+            "immutable": self._immutable
+        }
+        str_repr = reprlib.Repr()
+        contents = []
+        for k, v in fields.items():
+            if isinstance(v, str):
+                contents.append(f"{k}={str_repr.repr(v)}")
+            else:
+                contents.append(f"{k}={repr(v)}")
+        return f"ChannelInfo({', '.join(contents)})"
 
     def __setitem__(self, key: str, val) -> None:
         if not isinstance(key, str):
@@ -193,13 +201,15 @@ class ChannelInfo:
         setattr(self, key, val)
 
     def __str__(self) -> str:
-        max_width = 50
+        str_repr = reprlib.Repr()
         contents = []
         for k, v in self.items():
-            if len(v) > max_width:
-                contents.append(f"'{k}': '{v[:max_width]}...'")
+            if isinstance(v, str):
+                contents.append(f"{repr(k)}: {str_repr.repr(v)}")
+            elif isinstance(v, ChannelInfo.HtmlDict):
+                contents.append(f"{repr(k)}: {str(v)}")
             else:
-                contents.append(f"'{k}': '{v}'")
+                contents.append(f"{repr(k)}: {repr(v)}")
         return f"{{{', '.join(contents)}}}"
 
     class HtmlDict:
@@ -208,10 +218,10 @@ class ChannelInfo:
                      "_immutable")
 
         def __init__(self,
-                     about: str = "",
-                     community: str = "",
-                     featured_channels: str = "",
-                     videos: str = "",
+                     about: str,
+                     community: str,
+                     featured_channels: str,
+                     videos: str,
                      immutable: bool = False):
             if not isinstance(immutable, bool):
                 err_msg = (f"[{error_trace()}] `immutable` must be a boolean "
@@ -309,17 +319,7 @@ class ChannelInfo:
                            f"containing equivalent information (received "
                            f"object of type: {type(other)})")
                 raise TypeError(err_msg)
-            if isinstance(other, ChannelInfo.HtmlDict):
-                return hash(self) == hash(other)
-            try:
-                if set(self.keys()) != set(other.keys()):
-                    return False
-                for key, value in self.items():
-                    if other[key] != value:
-                        return False
-            except KeyError:
-                return False
-            return True
+            return tuple(self.items()) == tuple(other.items())
 
         def __getitem__(self, key: str):
             if not isinstance(key, str):
@@ -332,10 +332,31 @@ class ChannelInfo:
             return getattr(self, key)
 
         def __hash__(self) -> int:
+            if not self._immutable:
+                err_msg = (f"[{error_trace()}] ChannelInfo.HtmlDict object "
+                           f"cannot be hashed: instance must be immutable")
+                raise TypeError(err_msg)  # hash(mutable) throws TypeError
             return hash(self.values())
 
         def __iter__(self) -> Iterator[str]:
             yield from self.keys()
+
+        def __repr__(self) -> str:
+            fields = {
+                "about": self.about,
+                "community": self.community,
+                "featured_channels": self.featured_channels,
+                "videos": self.videos,
+                "immutable": self._immutable
+            }
+            str_repr = reprlib.Repr()
+            contents = []
+            for k, v in fields.items():
+                if isinstance(v, str):
+                    contents.append(f"{k}={str_repr.repr(v)}")
+                else:
+                    contents.append(f"{k}={repr(v)}")
+            return f"ChannelInfo.HtmlDict({', '.join(contents)})"
 
         def __setitem__(self, key: str, val) -> None:
             if not isinstance(key, str):
@@ -348,11 +369,11 @@ class ChannelInfo:
             setattr(self, key, val)
 
         def __str__(self) -> str:
-            max_width = 50
+            str_repr = reprlib.Repr()
             contents = []
             for k, v in self.items():
-                if len(v) > max_width:
-                    contents.append(f"'{k}': '{v[:max_width]}...'")
+                if isinstance(v, str):
+                    contents.append(f"{repr(k)}: {str_repr.repr(v)}")
                 else:
-                    contents.append(f"'{k}': '{v}'")
+                    contents.append(f"{repr(k)}: {repr(v)}")
             return f"{{{', '.join(contents)}}}"
