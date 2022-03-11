@@ -1,15 +1,108 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import reprlib
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 from datatube.error import error_trace
 
 
-class ChannelInfo:
 
-    __slots__ = ("_channel_id", "_channel_name", "_last_updated", "_html",
-                 "_immutable")
+class PropertyDict:
+
+    __slots__ = ("_immutable")
+
+    def __init__(self, immutable: bool = False):
+        if not isinstance(immutable, bool):
+            err_msg = (f"[{error_trace()}] `immutable` must be a boolean "
+                       f"(received object of type: {type(immutable)})")
+            raise TypeError(err_msg)
+        self._immutable = immutable
+
+    @property
+    def immutable(self) -> bool:
+        return self._immutable
+
+    def items(self) -> Iterator[tuple[str, Any]]:
+        return zip(self.keys(), self.values())
+
+    def keys(self) -> Iterator[str]:
+        is_property = lambda a: isinstance(getattr(type(self), a), property)
+        return (a for a in dir(type(self))
+                if is_property(a) and a != "immutable")
+
+    def values(self) -> Iterator[Any]:
+        return (getattr(self, attr) for attr in self.keys())
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.keys()
+
+    def __eq__(self, other: dict | PropertyDict) -> bool:
+        if not issubclass(type(other), (dict, PropertyDict)):
+            err_msg = (f"[{error_trace()}] `other` must be another "
+                       f"PropertyDict object or a base dictionary containing "
+                       f"equivalent information (received object of type: "
+                       f"{type(other)})")
+            raise TypeError(err_msg)
+        if len(self) != len(other):
+            return False
+        for key, val in self.items():
+            if key not in other or val != other[key]:
+                return False
+        return True
+
+    def __getitem__(self, key: str):
+        if not isinstance(key, str):
+            err_msg = (f"[{error_trace()}] key must be a string (received "
+                       f"object of type: {type(key)})")
+            raise TypeError(err_msg)
+        if key not in self.keys():
+            err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
+            raise KeyError(err_msg)
+        return getattr(self, key)
+
+    def __hash__(self) -> int:
+        if not self._immutable:
+            err_msg = (f"[{error_trace()}] PropertyDict cannot be hashed: "
+                       f"instance must be immutable")
+            raise TypeError(err_msg)  # hash(mutable) always throws TypeError
+        return hash(tuple(self.items()))
+
+    def __iter__(self) -> Iterable[str]:
+        yield from self.keys()
+
+    def __len__(self) -> int:
+        # this will always evaluate to the number of @property attributes
+        return len(list(self.keys()))
+
+    def __repr__(self) -> str:
+        return f"PropertyDict(immutable={self._immutable})"
+
+    def __setitem__(self, key: str, val) -> None:
+        if not isinstance(key, str):
+            err_msg = (f"[{error_trace()}] key must be a string (received "
+                       f"object of type: {type(key)})")
+            raise TypeError(err_msg)
+        if key not in self.keys():
+            err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
+            raise KeyError(err_msg)
+        setattr(self, key, val)
+
+    def __str__(self) -> str:
+        str_repr = reprlib.Repr()
+        contents = []
+        for k, v in self.items():
+            if issubclass(type(v), PropertyDict):
+                contents.append(f"{repr(k)}: {str(v)}")
+            elif isinstance(v, str):
+                contents.append(f"{repr(k)}: {str_repr.repr(v)}")
+            else:
+                contents.append(f"{repr(k)}: {repr(v)}")
+        return f"{{{', '.join(contents)}}}"
+
+
+class ChannelInfo(PropertyDict):
+
+    __slots__ = ("_channel_id", "_channel_name", "_html", "_last_updated")
 
     def __init__(self,
                  channel_id: str,
@@ -20,12 +113,7 @@ class ChannelInfo:
                  featured_channels_html: str,
                  videos_html: str,
                  immutable: bool = False):
-        if not isinstance(immutable, bool):
-            err_msg = (f"[{error_trace()}] `immutable` must be a boolean "
-                       f"(received object of type: {type(immutable)})")
-            raise TypeError(err_msg)
-        self._immutable = immutable
-
+        super().__init__(immutable=immutable)
         self.channel_id = channel_id
         self.channel_name = channel_name
         self.last_updated = last_updated
@@ -128,48 +216,6 @@ class ChannelInfo:
         new_html._immutable = self._immutable
         self._html = new_html
 
-    def items(self):
-        return zip(self.keys(), self.values())
-
-    def keys(self):
-        return ("channel_id", "channel_name", "last_updated", "html")
-
-    def values(self):
-        return (self.channel_id, self.channel_name, self.last_updated,
-                self.html)
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.keys()
-
-    def __eq__(self, other: ChannelInfo | dict) -> bool:
-        if not isinstance(other, (ChannelInfo, dict)):
-            err_msg = (f"[{error_trace()}] `other` must be another "
-                       f"ChannelInfo object or a base dictionary containing "
-                       f"equivalent information (received object of type: "
-                       f"{type(other)})")
-            raise TypeError(err_msg)
-        return tuple(self.items()) == tuple(other.items())
-
-    def __getitem__(self, key: str):
-        if not isinstance(key, str):
-            err_msg = (f"[{error_trace()}] key must be a string (received "
-                       f"object of type: {type(key)})")
-            raise TypeError(err_msg)
-        if key not in self.keys():
-            err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
-            raise KeyError(err_msg)
-        return getattr(self, key)
-
-    def __hash__(self) -> int:
-        if not self._immutable:
-            err_msg = (f"[{error_trace()}] ChannelInfo object cannot be "
-                       f"hashed: instance must be immutable")
-            raise TypeError(err_msg)  # hash(mutable) always throws TypeError
-        return hash(self.values())
-
-    def __iter__(self) -> Iterable[str]:
-        yield from self.keys()
-
     def __repr__(self) -> str:
         fields = {
             "channel_id": self.channel_id,
@@ -190,32 +236,9 @@ class ChannelInfo:
                 contents.append(f"{k}={repr(v)}")
         return f"ChannelInfo({', '.join(contents)})"
 
-    def __setitem__(self, key: str, val) -> None:
-        if not isinstance(key, str):
-            err_msg = (f"[{error_trace()}] key must be a string (received "
-                       f"object of type: {type(key)})")
-            raise TypeError(err_msg)
-        if key not in self.keys():
-            err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
-            raise KeyError(err_msg)
-        setattr(self, key, val)
+    class HtmlDict(PropertyDict):
 
-    def __str__(self) -> str:
-        str_repr = reprlib.Repr()
-        contents = []
-        for k, v in self.items():
-            if isinstance(v, str):
-                contents.append(f"{repr(k)}: {str_repr.repr(v)}")
-            elif isinstance(v, ChannelInfo.HtmlDict):
-                contents.append(f"{repr(k)}: {str(v)}")
-            else:
-                contents.append(f"{repr(k)}: {repr(v)}")
-        return f"{{{', '.join(contents)}}}"
-
-    class HtmlDict:
-
-        __slots__ = ("_about", "_community", "_featured_channels", "_videos",
-                     "_immutable")
+        __slots__ = ("_about", "_community", "_featured_channels", "_videos")
 
         def __init__(self,
                      about: str,
@@ -223,12 +246,7 @@ class ChannelInfo:
                      featured_channels: str,
                      videos: str,
                      immutable: bool = False):
-            if not isinstance(immutable, bool):
-                err_msg = (f"[{error_trace()}] `immutable` must be a boolean "
-                           f"(received object of type: {type(immutable)})")
-                raise TypeError(err_msg)
-            self._immutable = immutable
-
+            super().__init__(immutable=immutable)
             self.about = about
             self.community = community
             self.featured_channels = featured_channels
@@ -299,48 +317,6 @@ class ChannelInfo:
                 raise TypeError(f"{err_msg} {context}")
             self._videos = new_html
 
-        def items(self):
-            return zip(self.keys(), self.values())
-
-        def keys(self):
-            return ("about", "community", "featured_channels", "videos")
-
-        def values(self):
-            return (self.about, self.community, self.featured_channels,
-                    self.videos)
-
-        def __contains__(self, key: str) -> bool:
-            return key in self.keys()
-
-        def __eq__(self, other: ChannelInfo.HtmlDict | dict) -> bool:
-            if not isinstance(other, (ChannelInfo.HtmlDict, dict)):
-                err_msg = (f"[{error_trace()}] `other` must be another "
-                           f"ChannelInfo.HtmlDict object or a base dictionary "
-                           f"containing equivalent information (received "
-                           f"object of type: {type(other)})")
-                raise TypeError(err_msg)
-            return tuple(self.items()) == tuple(other.items())
-
-        def __getitem__(self, key: str):
-            if not isinstance(key, str):
-                err_msg = (f"[{error_trace()}] key must be a string (received "
-                           f"object of type: {type(key)})")
-                raise TypeError(err_msg)
-            if key not in self.keys():
-                err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
-                raise KeyError(err_msg)
-            return getattr(self, key)
-
-        def __hash__(self) -> int:
-            if not self._immutable:
-                err_msg = (f"[{error_trace()}] ChannelInfo.HtmlDict object "
-                           f"cannot be hashed: instance must be immutable")
-                raise TypeError(err_msg)  # hash(mutable) throws TypeError
-            return hash(self.values())
-
-        def __iter__(self) -> Iterator[str]:
-            yield from self.keys()
-
         def __repr__(self) -> str:
             fields = {
                 "about": self.about,
@@ -357,23 +333,3 @@ class ChannelInfo:
                 else:
                     contents.append(f"{k}={repr(v)}")
             return f"ChannelInfo.HtmlDict({', '.join(contents)})"
-
-        def __setitem__(self, key: str, val) -> None:
-            if not isinstance(key, str):
-                err_msg = (f"[{error_trace()}] key must be a string (received "
-                           f"object of type: {type(key)})")
-                raise TypeError(err_msg)
-            if key not in self.keys():
-                err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
-                raise KeyError(err_msg)
-            setattr(self, key, val)
-
-        def __str__(self) -> str:
-            str_repr = reprlib.Repr()
-            contents = []
-            for k, v in self.items():
-                if isinstance(v, str):
-                    contents.append(f"{repr(k)}: {str_repr.repr(v)}")
-                else:
-                    contents.append(f"{repr(k)}: {repr(v)}")
-            return f"{{{', '.join(contents)}}}"

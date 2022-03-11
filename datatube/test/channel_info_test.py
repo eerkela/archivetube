@@ -30,16 +30,17 @@ TEST_PROPERTIES = {
 EXPECTED_CHANNELINFO = {
     "channel_id": TEST_PROPERTIES["channel_id"],
     "channel_name": TEST_PROPERTIES["channel_name"],
-    "last_updated": TEST_PROPERTIES["last_updated"],
-    "html": HTML_PROPERTIES
+    "html": HTML_PROPERTIES,
+    "last_updated": TEST_PROPERTIES["last_updated"]
 }
 JSON_PATH = Path(DATA_DIR, "test_channel_info.json")
 DB_NAME = "datatube_test"
 
 
-class HtmlDictGetterSetterTests(unittest.TestCase):
+unittest.TestCase.maxDiff = None
 
-    maxDiff = None
+
+class HtmlDictGetterSetterTests(unittest.TestCase):
 
     def test_init_good_input(self):
         html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
@@ -321,11 +322,11 @@ class HtmlDictIterationTests(unittest.TestCase):
 
     def test_keys(self):
         html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
-        self.assertEqual(html.keys(), tuple(HTML_PROPERTIES))
+        self.assertEqual(tuple(html.keys()), tuple(HTML_PROPERTIES))
 
     def test_values(self):
         html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
-        self.assertEqual(html.values(), tuple(HTML_PROPERTIES.values()))
+        self.assertEqual(tuple(html.values()), tuple(HTML_PROPERTIES.values()))
 
     def test_iter(self):
         html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
@@ -335,8 +336,6 @@ class HtmlDictIterationTests(unittest.TestCase):
 
 
 class HtmlDictDunderTests(unittest.TestCase):
-
-    maxDiff = None
 
     def test_contains(self):
         html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
@@ -398,9 +397,13 @@ class HtmlDictDunderTests(unittest.TestCase):
         html4 = ChannelInfo.HtmlDict(**HTML_PROPERTIES, immutable=False)
         with self.assertRaises(TypeError) as err:
             hash(html4)
-        err_msg = ("[datatube.info.HtmlDict.__hash__] ChannelInfo.HtmlDict "
-                   "object cannot be hashed: instance must be immutable")
+        err_msg = ("[datatube.info.HtmlDict.__hash__] PropertyDict cannot be "
+                   "hashed: instance must be immutable")
         self.assertEqual(str(err.exception), err_msg)
+
+    def test_len(self):
+        html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
+        self.assertEqual(len(html), len(HTML_PROPERTIES))
 
     def test_repr(self):
         fields = {
@@ -443,8 +446,6 @@ class HtmlDictDunderTests(unittest.TestCase):
 
 
 class ChannelInfoGetterSetterTests(unittest.TestCase):
-
-    maxDiff = None
 
     def test_init_good_input(self):
         info = ChannelInfo(**TEST_PROPERTIES)
@@ -921,11 +922,12 @@ class ChannelInfoIterationTests(unittest.TestCase):
 
     def test_keys(self):
         info = ChannelInfo(**TEST_PROPERTIES)
-        self.assertEqual(info.keys(), tuple(EXPECTED_CHANNELINFO))
+        self.assertEqual(tuple(info.keys()), tuple(EXPECTED_CHANNELINFO))
 
     def test_values(self):
         info = ChannelInfo(**TEST_PROPERTIES)
-        self.assertEqual(info.values(), tuple(EXPECTED_CHANNELINFO.values()))
+        self.assertEqual(tuple(info.values()),
+                         tuple(EXPECTED_CHANNELINFO.values()))
 
     def test_iter(self):
         info = ChannelInfo(**TEST_PROPERTIES)
@@ -935,8 +937,6 @@ class ChannelInfoIterationTests(unittest.TestCase):
 
 
 class ChannelInfoDunderTests(unittest.TestCase):
-
-    maxDiff = None
 
     def test_contains(self):
         info = ChannelInfo(**TEST_PROPERTIES)
@@ -1027,9 +1027,13 @@ class ChannelInfoDunderTests(unittest.TestCase):
         info4 = ChannelInfo(**TEST_PROPERTIES, immutable=False)
         with self.assertRaises(TypeError) as err:
             hash(info4)
-        err_msg = ("[datatube.info.ChannelInfo.__hash__] ChannelInfo object "
-                   "cannot be hashed: instance must be immutable")
+        err_msg = ("[datatube.info.ChannelInfo.__hash__] PropertyDict cannot "
+                   "be hashed: instance must be immutable")
         self.assertEqual(str(err.exception), err_msg)
+
+    def test_len(self):
+        info = ChannelInfo(**TEST_PROPERTIES)
+        self.assertEqual(len(info), len(EXPECTED_CHANNELINFO))
 
     def test_repr(self):
         fields = {
