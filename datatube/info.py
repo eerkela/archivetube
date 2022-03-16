@@ -57,8 +57,7 @@ class PropertyDict:
                        f"object of type: {type(key)})")
             raise TypeError(err_msg)
         if key not in self.keys():
-            err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
-            raise KeyError(err_msg)
+            raise KeyError(key)
         return getattr(self, key)
 
     def __hash__(self) -> int:
@@ -84,8 +83,7 @@ class PropertyDict:
                        f"object of type: {type(key)})")
             raise TypeError(err_msg)
         if key not in self.keys():
-            err_msg = f"[{error_trace()}] KeyError: {repr(key)}"
-            raise KeyError(err_msg)
+            raise KeyError(key)
         setattr(self, key, val)
 
     def __str__(self) -> str:
@@ -386,3 +384,109 @@ class ChannelInfo(PropertyDict):
                 else:
                     contents.append(f"{k}={repr(v)}")
             return f"ChannelInfo.HtmlDict({', '.join(contents)})"
+
+
+class VideoInfo(PropertyDict):
+
+    def __init__(self,
+                 channel_id: str,
+                 channel_name: str,
+                 video_id: str,
+                 video_title: str,
+                 publish_date: datetime,
+                 last_updated: datetime,
+                 duration: timedelta,
+                 description: str,
+                 keywords: list[str] | tuple[str] | set[str],
+                 thumbnail_url: str):
+        raise NotImplementedError()
+
+    @classmethod
+    def from_json(cls, json_path: Path, immutable: bool = False) -> VideoInfo:
+        raise NotImplementedError()
+
+    @property
+    def channel_id(self) -> str:
+        raise NotImplementedError()
+
+    @channel_id.setter
+    def channel_id(self, new_id: str) -> None:
+        raise NotImplementedError()
+
+    @property
+    def channel_name(self) -> str:
+        raise NotImplementedError()
+
+    @channel_name.setter
+    def channel_name(self, new_name: str) -> None:
+        raise NotImplementedError()
+
+    @property
+    def video_id(self) -> str:
+        raise NotImplementedError()
+
+    @video_id.setter
+    def video_id(self, new_id: str) -> None:
+        raise NotImplementedError()
+
+    @property
+    def video_title(self) -> str:
+        raise NotImplementedError()
+
+    @video_title.setter
+    def video_title(self, new_title: str) -> None:
+        raise NotImplementedError()
+
+    @property
+    def publish_date(self) -> datetime:
+        raise NotImplementedError()
+
+    @publish_date.setter
+    def publish_date(self, new_date: datetime) -> None:
+        raise NotImplementedError()
+
+    @property
+    def last_updated(self) -> datetime:
+        raise NotImplementedError()
+
+    @last_updated.setter
+    def last_updated(self, new_date: datetime) -> None:
+        raise NotImplementedError()
+
+    @property
+    def duration(self) -> timedelta:
+        raise NotImplementedError()
+
+    @duration.setter
+    def duration(self, new_duration: timedelta) -> None:
+        raise NotImplementedError()
+
+    @property
+    def description(self) -> str:
+        raise NotImplementedError()
+
+    @description.setter
+    def description(self, new_description: str) -> None:
+        raise NotImplementedError()
+
+    @property
+    def keywords(self) -> list[str]:
+        raise NotImplementedError()
+
+    @keywords.setter
+    def keywords(self, new_keywords: list[str] | tuple[str] | set[str]) -> None:
+        raise NotImplementedError()
+
+    @property
+    def thumbnail_url(self) -> str:
+        raise NotImplementedError()
+
+    @thumbnail_url.setter
+    def thumbnail_url(self, new_url: str) -> None:
+        raise NotImplementedError()
+
+    def to_json(self, json_path: Path | None = None) -> dict[str, str | int]:
+        raise NotImplementedError()
+
+    def __repr__(self) -> str:
+        raise NotImplementedError()

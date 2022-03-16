@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import reprlib
-from time import time
 import unittest
 
 if __name__ == "__main__":
@@ -63,6 +62,7 @@ class HtmlDictGetterSetterTests(unittest.TestCase):
 
     def test_init_immutable_bad_type(self):
         test_val = 123
+        self.assertNotIsInstance(test_val, bool)
         err_msg = (f"[datatube.info.HtmlDict.__init__] `immutable` must be a "
                    f"boolean (received object of type: {type(test_val)})")
 
@@ -107,7 +107,7 @@ class HtmlDictGetterSetterTests(unittest.TestCase):
 
     def test_set_about_html_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, HTML_PROPERTIES["about"])
+        self.assertNotIsInstance(test_val, str)
         err_msg = (f"[datatube.info.HtmlDict.about] `about` must be a string "
                    f"(received object of type: {type(test_val)})")
 
@@ -165,7 +165,7 @@ class HtmlDictGetterSetterTests(unittest.TestCase):
 
     def test_set_community_html_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, HTML_PROPERTIES["community"])
+        self.assertNotIsInstance(test_val, str)
         err_msg = (f"[datatube.info.HtmlDict.community] `community` must be a "
                    f"string (received object of type: {type(test_val)})")
 
@@ -223,7 +223,7 @@ class HtmlDictGetterSetterTests(unittest.TestCase):
 
     def test_set_featured_channels_html_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, HTML_PROPERTIES["featured_channels"])
+        self.assertNotIsInstance(test_val, str)
         err_msg = (f"[datatube.info.HtmlDict.featured_channels] "
                    f"`featured_channels` must be a string (received object "
                    f"of type: {type(test_val)})")
@@ -282,7 +282,7 @@ class HtmlDictGetterSetterTests(unittest.TestCase):
 
     def test_set_videos_html_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, HTML_PROPERTIES["videos"])
+        self.assertNotIsInstance(test_val, str)
         err_msg = (f"[datatube.info.HtmlDict.videos] `videos` must be a "
                    f"string (received object of type: {type(test_val)})")
 
@@ -305,24 +305,22 @@ class HtmlDictGetterSetterTests(unittest.TestCase):
     def test_getitem_key_error(self):
         test_key = "this key does not exist"
         self.assertNotIn(test_key, HTML_PROPERTIES)
-        err_msg = (f"[datatube.info.HtmlDict.__getitem__] KeyError: "
-                   f"{repr(test_key)}")
+        err_msg = repr(test_key)
 
         html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
         with self.assertRaises(KeyError) as err:
             html[test_key]
-        self.assertEqual(str(err.exception), repr(err_msg))
+        self.assertEqual(str(err.exception), err_msg)
 
     def test_setitem_key_error(self):
         test_key = "this key does not exist"
         self.assertNotIn(test_key, HTML_PROPERTIES)
-        err_msg = (f"[datatube.info.HtmlDict.__setitem__] KeyError: "
-                   f"{repr(test_key)}")
+        err_msg = repr(test_key)
 
         html = ChannelInfo.HtmlDict(**HTML_PROPERTIES)
         with self.assertRaises(KeyError) as err:
             html[test_key] = "something"
-        self.assertEqual(str(err.exception), repr(err_msg))
+        self.assertEqual(str(err.exception), err_msg)
 
 
 class HtmlDictIterationTests(unittest.TestCase):
@@ -472,6 +470,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_init_immutable_bad_type(self):
         test_val = 123
+        self.assertNotIsInstance(test_val, bool)
         err_msg = (f"[datatube.info.ChannelInfo.__init__] `immutable` must be "
                    f"a boolean (received object of type: {type(test_val)})")
 
@@ -481,6 +480,8 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_channel_id(self):
         test_val = "UC_some_other_channel_id"  # still 24 characters
+        self.assertEqual(len(test_val), 24)
+        self.assertTrue(test_val.startswith("UC"))
         self.assertNotEqual(test_val, TEST_PROPERTIES["channel_id"])
 
         # from init
@@ -499,6 +500,8 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_channel_id_immutable_instance(self):
         test_val = "UC_some_other_channel_id"  # still 24 characters
+        self.assertEqual(len(test_val), 24)
+        self.assertTrue(test_val.startswith("UC"))
         self.assertNotEqual(test_val, TEST_PROPERTIES["channel_id"])
         err_msg = ("[datatube.info.ChannelInfo.channel_id] cannot reassign "
                    "`channel_id`: ChannelInfo instance is immutable")
@@ -516,7 +519,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_channel_id_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, TEST_PROPERTIES["channel_id"])
+        self.assertNotIsInstance(test_val, str)
         err_msg = (f"[datatube.info.ChannelInfo.channel_id] `channel_id` must "
                    f"be a 24-character ExternalId string starting with 'UC' "
                    f"(received object of type: {type(test_val)})")
@@ -539,7 +542,8 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_channel_id_bad_length(self):
         test_val = "UC_not_24_chars"
-        self.assertNotEqual(test_val, TEST_PROPERTIES["channel_id"])
+        self.assertNotEqual(len(test_val), 24)
+        self.assertTrue(test_val.startswith("UC"))
         err_msg = (f"[datatube.info.ChannelInfo.channel_id] `channel_id` must "
                    f"be a 24-character ExternalId string starting with 'UC' "
                    f"(received: {repr(test_val)})")
@@ -562,7 +566,8 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_channel_id_doesnt_start_with_UC(self):
         test_val = "_does_not_start_with_UC_"  # still 24 characters
-        self.assertNotEqual(test_val, TEST_PROPERTIES["channel_id"])
+        self.assertEqual(len(test_val), 24)
+        self.assertFalse(test_val.startswith("UC"))
         err_msg = (f"[datatube.info.ChannelInfo.channel_id] `channel_id` must "
                    f"be a 24-character ExternalId string starting with 'UC' "
                    f"(received: {repr(test_val)})")
@@ -620,7 +625,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_channel_name_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, TEST_PROPERTIES["channel_name"])
+        self.assertNotIsInstance(test_val, str)
         err_msg = (f"[datatube.info.ChannelInfo.channel_name] `channel_name` "
                    f"must be a non-empty string (received object of type: "
                    f"{type(test_val)})")
@@ -643,7 +648,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_channel_name_empty_string(self):
         test_val = ""
-        self.assertNotEqual(test_val, TEST_PROPERTIES["channel_name"])
+        self.assertEqual(test_val, "")
         err_msg = (f"[datatube.info.ChannelInfo.channel_name] `channel_name` "
                    f"must be a non-empty string (received: {repr(test_val)})")
 
@@ -700,7 +705,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_last_updated_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, TEST_PROPERTIES["last_updated"])
+        self.assertNotIsInstance(test_val, datetime)
         err_msg = (f"[datatube.info.ChannelInfo.last_updated] `last_updated` "
                    f"must be a timezone-aware datetime.datetime object stating "
                    f"the last time this channel's information was checked for "
@@ -724,7 +729,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_last_updated_has_no_timezone(self):
         test_val = datetime.now()  # no tzinfo
-        self.assertNotEqual(test_val, TEST_PROPERTIES["last_updated"])
+        self.assertIsNone(test_val.tzinfo)
         err_msg = (f"[datatube.info.ChannelInfo.last_updated] `last_updated` "
                    f"must be a timezone-aware datetime.datetime object stating "
                    f"the last time this channel's information was checked for "
@@ -749,7 +754,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_last_updated_in_future(self):
         test_val = datetime(9999, 12, 31, tzinfo=timezone.utc)
-        self.assertNotEqual(test_val, TEST_PROPERTIES["last_updated"])
+        self.assertGreater(test_val, datetime.now(timezone.utc))
         err_msg = (f"[datatube.info.ChannelInfo.last_updated] `last_updated` "
                    f"must be a timezone-aware datetime.datetime object stating "
                    f"the last time this channel's information was checked for "
@@ -840,7 +845,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
 
     def test_set_html_bad_type(self):
         test_val = 123
-        self.assertNotEqual(test_val, HTML_PROPERTIES)
+        self.assertNotIsInstance(test_val, (dict, ChannelInfo.HtmlDict))
         err_msg = (f"[datatube.info.ChannelInfo.html] `html` must be a "
                    f"ChannelInfo.HtmlDict object or a base dictionary "
                    f"containing equivalent information (received object of "
@@ -863,7 +868,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
                     "featured_channels": "different html",
                     "videos": "different html",
                     "extra field": "shouldn't be here"}
-        self.assertNotEqual(test_val, HTML_PROPERTIES)
+        self.assertFalse(all(k in HTML_PROPERTIES for k in test_val))
         err_msg = ("[datatube.info.ChannelInfo.html] `html` must be a "
                    "ChannelInfo.HtmlDict object or a base dictionary "
                    "containing equivalent information (could not convert base "
@@ -884,7 +889,7 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
         test_val = {"about": "different html",
                     "community": "different html",
                     "featured_channels": "different html"}  # missing 'videos'
-        self.assertNotEqual(test_val, HTML_PROPERTIES)
+        self.assertFalse(all(k in test_val for k in HTML_PROPERTIES))
         err_msg = ("[datatube.info.ChannelInfo.html] `html` must be a "
                    "ChannelInfo.HtmlDict object or a base dictionary "
                    "containing equivalent information (could not convert base "
@@ -904,24 +909,22 @@ class ChannelInfoGetterSetterTests(unittest.TestCase):
     def test_getitem_key_error(self):
         test_key = "this key does not exist"
         self.assertNotIn(test_key, TEST_PROPERTIES)
-        err_msg = (f"[datatube.info.ChannelInfo.__getitem__] KeyError: "
-                   f"{repr(test_key)}")
+        err_msg = repr(test_key)
 
         info = ChannelInfo(**TEST_PROPERTIES)
         with self.assertRaises(KeyError) as err:
             info[test_key]
-        self.assertEqual(str(err.exception), repr(err_msg))
+        self.assertEqual(str(err.exception), err_msg)
 
     def test_setitem_key_error(self):
         test_key = "this key does not exist"
         self.assertNotIn(test_key, TEST_PROPERTIES)
-        err_msg = (f"[datatube.info.ChannelInfo.__setitem__] KeyError: "
-                   f"{repr(test_key)}")
+        err_msg = repr(test_key)
 
         info = ChannelInfo(**TEST_PROPERTIES)
         with self.assertRaises(KeyError) as err:
             info[test_key] = "something"
-        self.assertEqual(str(err.exception), repr(err_msg))
+        self.assertEqual(str(err.exception), err_msg)
 
 
 class ChannelInfoIterationTests(unittest.TestCase):
@@ -1129,6 +1132,7 @@ class ChannelInfoJSONTests(unittest.TestCase):
     def test_from_json_errors(self):
         # bad path type
         test_val = 123
+        self.assertNotIsInstance(test_val, Path)
         with self.assertRaises(TypeError) as err:
             ChannelInfo.from_json(test_val)
         err_msg = (f"[datatube.info.ChannelInfo.from_json] `json_path` must "
@@ -1146,6 +1150,7 @@ class ChannelInfoJSONTests(unittest.TestCase):
 
         # file points to a directory
         test_val = Path(JSON_PATH.parent)
+        self.assertTrue(test_val.is_dir())
         with self.assertRaises(ValueError) as err:
             ChannelInfo.from_json(test_val)
         err_msg = (f"[datatube.info.ChannelInfo.from_json] `json_path` does "
@@ -1154,6 +1159,7 @@ class ChannelInfoJSONTests(unittest.TestCase):
 
         # file does not end in .json
         test_val = Path(JSON_PATH.parent, f"{JSON_PATH.stem}.txt")
+        self.assertNotEqual(test_val.suffix, ".json")
         test_val.touch()
         with self.assertRaises(ValueError) as err:
             ChannelInfo.from_json(test_val)
@@ -1167,6 +1173,7 @@ class ChannelInfoJSONTests(unittest.TestCase):
 
         # bad path type
         test_val = 123
+        self.assertNotIsInstance(test_val, Path)
         with self.assertRaises(TypeError) as err:
             info.to_json(test_val)
         err_msg = (f"[datatube.info.ChannelInfo.to_json] `save_to` must be "
@@ -1175,6 +1182,7 @@ class ChannelInfoJSONTests(unittest.TestCase):
 
         # path points to directory
         test_val = Path(JSON_PATH.parent)
+        self.assertTrue(test_val.is_dir())
         with self.assertRaises(ValueError) as err:
             info.to_json(test_val)
         err_msg = (f"[datatube.info.ChannelInfo.to_json] `save_to` must end "
@@ -1183,6 +1191,7 @@ class ChannelInfoJSONTests(unittest.TestCase):
 
         # file does not end in .json
         test_val = Path(JSON_PATH.parent, f"{JSON_PATH.name}.txt")
+        self.assertNotEqual(test_val.suffix, ".json")
         with self.assertRaises(ValueError) as err:
             info.to_json(test_val)
         err_msg = (f"[datatube.info.ChannelInfo.to_json] `save_to` must end "
