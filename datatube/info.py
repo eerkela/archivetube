@@ -1,10 +1,11 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 import reprlib
 from typing import Any, Iterable, Iterator
 
 from datatube.error import error_trace
-
 
 
 class PropertyDict:
@@ -50,7 +51,7 @@ class PropertyDict:
                 return False
         return True
 
-    def __getitem__(self, key: str):
+    def __getitem__(self, key: str) -> Any:
         if not isinstance(key, str):
             err_msg = (f"[{error_trace()}] key must be a string (received "
                        f"object of type: {type(key)})")
@@ -61,7 +62,7 @@ class PropertyDict:
         return getattr(self, key)
 
     def __hash__(self) -> int:
-        if not self._immutable:
+        if not self.immutable:
             err_msg = (f"[{error_trace()}] PropertyDict cannot be hashed: "
                        f"instance must be immutable")
             raise TypeError(err_msg)  # hash(mutable) always throws TypeError
@@ -75,9 +76,9 @@ class PropertyDict:
         return len(list(self.keys()))
 
     def __repr__(self) -> str:
-        return f"PropertyDict(immutable={self._immutable})"
+        return f"PropertyDict(immutable={self.immutable})"
 
-    def __setitem__(self, key: str, val) -> None:
+    def __setitem__(self, key: str, val: Any) -> None:
         if not isinstance(key, str):
             err_msg = (f"[{error_trace()}] key must be a string (received "
                        f"object of type: {type(key)})")
@@ -125,13 +126,38 @@ class ChannelInfo(PropertyDict):
             immutable=immutable
         )
 
+    @classmethod
+    def from_json(cls, json_path: Path, immutable: bool = False) -> ChannelInfo:
+        if not isinstance(json_path, Path):
+            err_msg = (f"[{error_trace()}] `json_path` must be Path-like "
+                       f"(received object of type: {type(json_path)})")
+            raise TypeError(err_msg)
+        if not json_path.exists():
+            err_msg = (f"[{error_trace()}] `json_path` does not exist: "
+                       f"{json_path}")
+            raise ValueError(err_msg)
+        if json_path.suffix != ".json":
+            err_msg = (f"[{error_trace()}] `json_path` does not point to a "
+                       f".json file: {json_path}")
+            raise ValueError(err_msg)
+        with json_path.open("r") as json_file:
+            saved = json.load(json_file)
+        return cls(channel_id=saved["channel_id"],
+                   channel_name=saved["channel_name"],
+                   last_updated=datetime.fromisoformat(saved["last_updated"]),
+                   about_html=saved["html"]["about"],
+                   community_html=saved["html"]["community"],
+                   featured_channels_html=saved["html"]["featured_channels"],
+                   videos_html=saved["html"]["videos"],
+                   immutable=immutable)
+
     @property
     def channel_id(self) -> str:
         return self._channel_id
 
     @channel_id.setter
     def channel_id(self, new_id: str) -> None:
-        if self._immutable and hasattr(self, "_channel_id"):
+        if self.immutable and hasattr(self, "_channel_id"):
             err_msg = (f"[{error_trace()}] cannot reassign `channel_id`: "
                        f"ChannelInfo instance is immutable")
             raise AttributeError(err_msg)
@@ -151,7 +177,7 @@ class ChannelInfo(PropertyDict):
 
     @channel_name.setter
     def channel_name(self, new_name: str) -> None:
-        if self._immutable and hasattr(self, "_channel_name"):
+        if self.immutable and hasattr(self, "_channel_name"):
             err_msg = (f"[{error_trace()}] cannot reassign `channel_name`: "
                        f"ChannelInfo instance is immutable")
             raise AttributeError(err_msg)
@@ -171,7 +197,7 @@ class ChannelInfo(PropertyDict):
 
     @last_updated.setter
     def last_updated(self, new_time: datetime) -> None:
-        if self._immutable and hasattr(self, "_last_updated"):
+        if self.immutable and hasattr(self, "_last_updated"):
             err_msg = (f"[{error_trace()}] cannot reassign `last_updated`: "
                        f"ChannelInfo instance is immutable")
             raise AttributeError(err_msg)
@@ -197,7 +223,7 @@ class ChannelInfo(PropertyDict):
 
     @html.setter
     def html(self, new_html: ChannelInfo.HtmlDict | dict[str, str]) -> None:
-        if self._immutable and hasattr(self, "_html"):
+        if self.immutable and hasattr(self, "_html"):
             err_msg = (f"[{error_trace()}] cannot reassign `html`: "
                        f"ChannelInfo instance is immutable")
             raise AttributeError(err_msg)
@@ -213,8 +239,35 @@ class ChannelInfo(PropertyDict):
             except (TypeError, ValueError) as err:
                 context = (f"(could not convert base dictionary)")
                 raise ValueError(f"{err_msg} {context}") from err
-        new_html._immutable = self._immutable
+        new_html._immutable = self.immutable
         self._html = new_html
+
+    def to_json(self,
+                save_to: Path | None = None) -> dict[str, str | dict[str, str]]:
+        json_dict = {
+            "channel_id": self.channel_id,
+            "channel_name": self.channel_name,
+            "last_updated": self.last_updated.isoformat(),
+            "html": {
+                "about": self.html.about,
+                "community": self.html.community,
+                "featured_channels": self.html.featured_channels,
+                "videos": self.html.videos
+            }
+        }
+        if save_to is not None:
+            if not isinstance(save_to, Path):
+                err_msg = (f"[{error_trace()}] `save_to` must be Path-like "
+                           f"(received object of type: {type(save_to)})")
+                raise TypeError(err_msg)
+            if save_to.suffix != ".json":
+                err_msg = (f"[{error_trace()}] `save_to` must end with a "
+                           f".json file extension (received: {save_to})")
+                raise ValueError(err_msg)
+            save_to.parent.mkdir(parents=True, exist_ok=True)
+            with save_to.open("w") as json_file:
+                json.dump(json_dict, json_file)
+        return json_dict
 
     def __repr__(self) -> str:
         fields = {
@@ -225,7 +278,7 @@ class ChannelInfo(PropertyDict):
             "community_html": self.html["community"],
             "featured_channels_html": self.html["featured_channels"],
             "videos_html": self.html["videos"],
-            "immutable": self._immutable
+            "immutable": self.immutable
         }
         str_repr = reprlib.Repr()
         contents = []
@@ -258,7 +311,7 @@ class ChannelInfo(PropertyDict):
 
         @about.setter
         def about(self, new_html: str) -> None:
-            if self._immutable and hasattr(self, "_about"):
+            if self.immutable and hasattr(self, "_about"):
                 err_msg = (f"[{error_trace()}] cannot reassign `about`: "
                            f"HtmlDict instance is immutable")
                 raise AttributeError(err_msg)
@@ -274,7 +327,7 @@ class ChannelInfo(PropertyDict):
 
         @community.setter
         def community(self, new_html: str) -> None:
-            if self._immutable and hasattr(self, "_community"):
+            if self.immutable and hasattr(self, "_community"):
                 err_msg = (f"[{error_trace()}] cannot reassign `community`: "
                            f"HtmlDict instance is immutable")
                 raise AttributeError(err_msg)
@@ -290,7 +343,7 @@ class ChannelInfo(PropertyDict):
 
         @featured_channels.setter
         def featured_channels(self, new_html: str) -> None:
-            if self._immutable and hasattr(self, "_featured_channels"):
+            if self.immutable and hasattr(self, "_featured_channels"):
                 err_msg = (f"[{error_trace()}] cannot reassign "
                            f"`featured_channels`: HtmlDict instance is "
                            f"immutable")
@@ -307,7 +360,7 @@ class ChannelInfo(PropertyDict):
 
         @videos.setter
         def videos(self, new_html: str) -> None:
-            if self._immutable and hasattr(self, "_videos"):
+            if self.immutable and hasattr(self, "_videos"):
                 err_msg = (f"[{error_trace()}] cannot reassign `videos`: "
                            f"HtmlDict instance is immutable")
                 raise AttributeError(err_msg)
@@ -323,7 +376,7 @@ class ChannelInfo(PropertyDict):
                 "community": self.community,
                 "featured_channels": self.featured_channels,
                 "videos": self.videos,
-                "immutable": self._immutable
+                "immutable": self.immutable
             }
             str_repr = reprlib.Repr()
             contents = []

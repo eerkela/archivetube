@@ -27,13 +27,24 @@ TEST_PROPERTIES = {
     "featured_channels_html": HTML_PROPERTIES["featured_channels"],
     "videos_html": HTML_PROPERTIES["videos"]
 }
+JSON_PATH = Path(DATA_DIR, "test_channel_info.json")
+EXPECTED_JSON = {
+    "channel_id": TEST_PROPERTIES["channel_id"],
+    "channel_name": TEST_PROPERTIES["channel_name"],
+    "last_updated": TEST_PROPERTIES["last_updated"].isoformat(),
+    "html": {
+        "about": TEST_PROPERTIES["about_html"],
+        "community": TEST_PROPERTIES["community_html"],
+        "featured_channels": TEST_PROPERTIES["featured_channels_html"],
+        "videos": TEST_PROPERTIES["videos_html"]
+    }
+}
 EXPECTED_CHANNELINFO = {
     "channel_id": TEST_PROPERTIES["channel_id"],
     "channel_name": TEST_PROPERTIES["channel_name"],
     "html": HTML_PROPERTIES,
     "last_updated": TEST_PROPERTIES["last_updated"]
 }
-JSON_PATH = Path(DATA_DIR, "test_channel_info.json")
 DB_NAME = "datatube_test"
 
 
@@ -1079,115 +1090,104 @@ class ChannelInfoDunderTests(unittest.TestCase):
         self.assertEqual(str(info), str(expected))
 
 
-# class ChannelInfoJSONTests(unittest.TestCase):
+class ChannelInfoJSONTests(unittest.TestCase):
 
-#     # TODO: Check channel JSON format matches expected
+    @classmethod
+    def setUpClass(cls) -> None:
+        with JSON_PATH.open("w") as json_file:
+            json.dump(EXPECTED_JSON, json_file)
 
-#     @classmethod
-#     def setUpClass(cls) -> None:
-#         saved_result = {
-#             "channel_id": TEST_PROPERTIES["channel_id"],
-#             "channel_name": TEST_PROPERTIES["channel_name"],
-#             "last_updated": TEST_PROPERTIES["last_updated"],
-#             "html": {
-#                 "about": TEST_PROPERTIES["about_html"],
-#                 "community": TEST_PROPERTIES["community_html"],
-#                 "featured_channels": TEST_PROPERTIES["featured_channels_html"],
-#                 "videos": TEST_PROPERTIES["videos_html"]
-#             }
-#         }
-#         with JSON_PATH.open("w") as json_file:
-#             json.dump(saved_result, json_file, default=str)
+    def test_from_json(self):
+        info = ChannelInfo.from_json(JSON_PATH)
+        self.assertEqual(info.channel_id, TEST_PROPERTIES["channel_id"])
+        self.assertEqual(info.channel_name, TEST_PROPERTIES["channel_name"])
+        self.assertEqual(info.last_updated, TEST_PROPERTIES["last_updated"])
+        self.assertEqual(info.html["about"], TEST_PROPERTIES["about_html"])
+        self.assertEqual(info.html["community"],
+                         TEST_PROPERTIES["community_html"])
+        self.assertEqual(info.html["featured_channels"],
+                         TEST_PROPERTIES["featured_channels_html"])
+        self.assertEqual(info.html["videos"], TEST_PROPERTIES["videos_html"])
 
-#     def test_from_json(self):
-#         info = ChannelInfo.from_json(JSON_PATH)
-#         self.assertEqual(info.channel_id, TEST_PROPERTIES["channel_id"])
-#         self.assertEqual(info.channel_name, TEST_PROPERTIES["channel_name"])
-#         self.assertEqual(info.last_updated, TEST_PROPERTIES["last_updated"])
-#         self.assertEqual(info.html["about"], TEST_PROPERTIES["about_html"])
-#         self.assertEqual(info.html["community"],
-#                          TEST_PROPERTIES["community_html"])
-#         self.assertEqual(info.html["featured_channels"],
-#                          TEST_PROPERTIES["featured_channels_html"])
-#         self.asssertEqual(info.html["videos"], TEST_PROPERTIES["videos_html"])
+        # immutable
+        info = ChannelInfo.from_json(JSON_PATH, immutable=True)
+        self.assertTrue(info.immutable)
+        with self.assertRaises(AttributeError):
+            info.channel_name = "Some Other Channel Name"
 
-#     def test_to_json(self):
-#         info = ChannelInfo(**TEST_PROPERTIES)
-#         test_path = Path(JSON_PATH.parent, "temp_channel_info_to_json.json")
-#         test_path.unlink(missing_ok=True)
-#         info.to_json(test_path)
-#         self.assertTrue(test_path.exists())
-#         with test_path.open("r") as json_file:
-#             saved = json.load(json_file)
-#         self.assertEqual(saved, json.dumps(TEST_PROPERTIES, default=str))
-#         test_path.unlink()
+    def test_to_json(self):
+        info = ChannelInfo(**TEST_PROPERTIES)
+        test_path = Path(JSON_PATH.parent, "temp_channel_info_to_json.json")
+        test_path.unlink(missing_ok=True)
+        info.to_json(test_path)
+        self.assertTrue(test_path.exists())
+        with test_path.open("r") as json_file:
+            saved = json.load(json_file)
+        self.assertEqual(saved, EXPECTED_JSON)
+        test_path.unlink()
 
-#     def test_from_json_errors(self):
-#         # bad path type
-#         test_val = 123
-#         with self.assertRaises(TypeError) as err:
-#             ChannelInfo.from_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
+    def test_from_json_errors(self):
+        # bad path type
+        test_val = 123
+        with self.assertRaises(TypeError) as err:
+            ChannelInfo.from_json(test_val)
+        err_msg = (f"[datatube.info.ChannelInfo.from_json] `json_path` must "
+                   f"be Path-like (received object of type: {type(test_val)})")
+        self.assertEqual(str(err.exception), err_msg)
 
-#         # path does not exist
-#         test_val = Path(JSON_PATH.parent, "this_path_does_not_exist.json")
-#         with self.assertRaises(ValueError) as err:
-#             ChannelInfo.from_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
+        # path does not exist
+        test_val = Path(JSON_PATH.parent, "this_path_does_not_exist.json")
+        self.assertFalse(test_val.exists())
+        with self.assertRaises(ValueError) as err:
+            ChannelInfo.from_json(test_val)
+        err_msg = (f"[datatube.info.ChannelInfo.from_json] `json_path` does "
+                   f"not exist: {test_val}")
+        self.assertEqual(str(err.exception), err_msg)
 
-#         # path points to directory
-#         test_val = Path(JSON_PATH.parent)
-#         with self.assertRaises(ValueError) as err:
-#             ChannelInfo.from_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
+        # file points to a directory
+        test_val = Path(JSON_PATH.parent)
+        with self.assertRaises(ValueError) as err:
+            ChannelInfo.from_json(test_val)
+        err_msg = (f"[datatube.info.ChannelInfo.from_json] `json_path` does "
+                   f"not point to a .json file: {test_val}")
+        self.assertEqual(str(err.exception), err_msg)
 
-#         # file does not end in .json
-#         test_val = Path(JSON_PATH.parent, f"{JSON_PATH.name}.txt")
-#         with self.assertRaises(ValueError) as err:
-#             ChannelInfo.from_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
+        # file does not end in .json
+        test_val = Path(JSON_PATH.parent, f"{JSON_PATH.stem}.txt")
+        test_val.touch()
+        with self.assertRaises(ValueError) as err:
+            ChannelInfo.from_json(test_val)
+        test_val.unlink()
+        err_msg = (f"[datatube.info.ChannelInfo.from_json] `json_path` does "
+                   f"not point to a .json file: {test_val}")
+        self.assertEqual(str(err.exception), err_msg)
 
-#     def test_to_json_errors(self):
-#         info = ChannelInfo(**TEST_PROPERTIES)
+    def test_to_json_errors(self):
+        info = ChannelInfo(**TEST_PROPERTIES)
 
-#         # bad path type
-#         test_val = 123
-#         with self.assertRaises(TypeError) as err:
-#             info.to_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
+        # bad path type
+        test_val = 123
+        with self.assertRaises(TypeError) as err:
+            info.to_json(test_val)
+        err_msg = (f"[datatube.info.ChannelInfo.to_json] `save_to` must be "
+                   f"Path-like (received object of type: {type(test_val)})")
+        self.assertEqual(str(err.exception), err_msg)
 
-#         # path does not exist
-#         test_val = Path(JSON_PATH.parent, "this_path_does_not_exist.json")
-#         with self.assertRaises(ValueError) as err:
-#             info.to_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
+        # path points to directory
+        test_val = Path(JSON_PATH.parent)
+        with self.assertRaises(ValueError) as err:
+            info.to_json(test_val)
+        err_msg = (f"[datatube.info.ChannelInfo.to_json] `save_to` must end "
+                   f"with a .json file extension (received: {test_val})")
+        self.assertEqual(str(err.exception), err_msg)
 
-#         # path points to directory
-#         test_val = Path(JSON_PATH.parent)
-#         with self.assertRaises(ValueError) as err:
-#             info.to_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
-
-#         # file does not end in .json
-#         test_val = Path(JSON_PATH.parent, f"{JSON_PATH.name}.txt")
-#         with self.assertRaises(ValueError) as err:
-#             info.to_json(test_val)
-#         err_msg = ""
-#         self.assertEqual(str(err.exception), err_msg)
-
-
-# class ChannelInfoSQLTests(unittest.TestCase):
-
-#     @classmethod
-#     def setUpClass(cls) -> None:
-#         raise NotImplementedError()
+        # file does not end in .json
+        test_val = Path(JSON_PATH.parent, f"{JSON_PATH.name}.txt")
+        with self.assertRaises(ValueError) as err:
+            info.to_json(test_val)
+        err_msg = (f"[datatube.info.ChannelInfo.to_json] `save_to` must end "
+                   f"with a .json file extension (received: {test_val})")
+        self.assertEqual(str(err.exception), err_msg)
 
 
 if __name__ == "__main__":

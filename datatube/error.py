@@ -32,7 +32,7 @@ def error_trace(self_name: str = "self",
         if self_name in parentframe.f_locals:  # for regular methods
             name.append(parentframe.f_locals[self_name].__class__.__name__)
         elif cls_name in parentframe.f_locals:  # for classmethods
-            name.append(parentframe.f_locals[cls_name].__class__.__name__)
+            name.append(parentframe.f_locals[cls_name].__name__)
 
     # get function/method name
     callable_name = parentframe.f_code.co_name
