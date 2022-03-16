@@ -26,6 +26,12 @@ TEST_PROPERTIES = {
     "featured_channels_html": HTML_PROPERTIES["featured_channels"],
     "videos_html": HTML_PROPERTIES["videos"]
 }
+EXPECTED_CHANNELINFO = {
+    "channel_id": TEST_PROPERTIES["channel_id"],
+    "channel_name": TEST_PROPERTIES["channel_name"],
+    "html": HTML_PROPERTIES,
+    "last_updated": TEST_PROPERTIES["last_updated"]
+}
 JSON_PATH = Path(DATA_DIR, "test_channel_info.json")
 EXPECTED_JSON = {
     "channel_id": TEST_PROPERTIES["channel_id"],
@@ -37,12 +43,6 @@ EXPECTED_JSON = {
         "featured_channels": TEST_PROPERTIES["featured_channels_html"],
         "videos": TEST_PROPERTIES["videos_html"]
     }
-}
-EXPECTED_CHANNELINFO = {
-    "channel_id": TEST_PROPERTIES["channel_id"],
-    "channel_name": TEST_PROPERTIES["channel_name"],
-    "html": HTML_PROPERTIES,
-    "last_updated": TEST_PROPERTIES["last_updated"]
 }
 DB_NAME = "datatube_test"
 
@@ -963,21 +963,24 @@ class ChannelInfoDunderTests(unittest.TestCase):
         self.assertFalse("" in info)  # empty string
         self.assertFalse("this key does not exist" in info)
 
-    def test_equality_channelinfo_instance(self):
+    def test_equality_channelinfo_instances(self):
         # True
         info1 = ChannelInfo(**TEST_PROPERTIES)
         info2 = ChannelInfo(**TEST_PROPERTIES)
         self.assertEqual(info1, info2)
 
         # False
-        for key, val in TEST_PROPERTIES.items():
-            if isinstance(val, str):
-                test_val = "UC_different_from_info1_"
-            elif isinstance(val, datetime):
-                test_val = datetime.now(timezone.utc)
-            else:
-                raise NotImplementedError()
-            self.assertNotEqual(val, test_val)
+        different = {
+            "channel_id": "UC_different_from_info1_",
+            "channel_name": "Some Other Channel Name",
+            "last_updated": datetime.now(timezone.utc),
+            "about_html": "different from info1",
+            "community_html": "different from info1",
+            "featured_channels_html": "different from info1",
+            "videos_html": "different from info1"
+        }
+        for key, test_val in different.items():
+            self.assertNotEqual(test_val, TEST_PROPERTIES[key])
             info3 = ChannelInfo(**{**TEST_PROPERTIES, key: test_val})
             self.assertNotEqual(info1, info3)
 
@@ -987,14 +990,17 @@ class ChannelInfoDunderTests(unittest.TestCase):
         self.assertEqual(info, EXPECTED_CHANNELINFO)
 
         # False - unequal values
-        for key, val in TEST_PROPERTIES.items():
-            if isinstance(val, str):
-                test_val = "UC_different_from_info1_"
-            elif isinstance(val, datetime):
-                test_val = datetime.now(timezone.utc)
-            else:
-                raise NotImplementedError()
-            self.assertNotEqual(val, test_val)
+        different = {
+            "channel_id": "UC_different_from_info1_",
+            "channel_name": "Some Other Channel Name",
+            "last_updated": datetime.now(timezone.utc),
+            "about_html": "different from info1",
+            "community_html": "different from info1",
+            "featured_channels_html": "different from info1",
+            "videos_html": "different from info1"
+        }
+        for key, test_val in different.items():
+            self.assertNotEqual(test_val, TEST_PROPERTIES[key])
             if "_html" in key:
                 html_key = key.split("_html", maxsplit=1)[0]
                 html_dict = {**HTML_PROPERTIES, html_key: test_val}
@@ -1025,14 +1031,17 @@ class ChannelInfoDunderTests(unittest.TestCase):
         self.assertEqual(hash(info1), hash(info2))
 
         # unequal values
-        for key, val in TEST_PROPERTIES.items():
-            if isinstance(val, str):
-                test_val = "UC_different_from_info1_"
-            elif isinstance(val, datetime):
-                test_val = datetime.now(timezone.utc)
-            else:
-                raise NotImplementedError()
-            self.assertNotEqual(val, test_val)
+        different = {
+            "channel_id": "UC_different_from_info1_",
+            "channel_name": "Some Other Channel Name",
+            "last_updated": datetime.now(timezone.utc),
+            "about_html": "different from info1",
+            "community_html": "different from info1",
+            "featured_channels_html": "different from info1",
+            "videos_html": "different from info1"
+        }
+        for key, test_val in different.items():
+            self.assertNotEqual(test_val, TEST_PROPERTIES[key])
             info3 = ChannelInfo(**{**TEST_PROPERTIES, key: test_val},
                                 immutable=True)
             self.assertNotEqual(hash(info1), hash(info3))
@@ -1050,10 +1059,7 @@ class ChannelInfoDunderTests(unittest.TestCase):
         self.assertEqual(len(info), len(EXPECTED_CHANNELINFO))
 
     def test_repr(self):
-        fields = {
-            **TEST_PROPERTIES,
-            "immutable": False
-        }
+        fields = {**TEST_PROPERTIES, "immutable": False}
         str_repr = reprlib.Repr()
         formatted = []
         for k, v in fields.items():
@@ -1072,22 +1078,33 @@ class ChannelInfoDunderTests(unittest.TestCase):
         self.assertEqual(str(info), str(EXPECTED_CHANNELINFO))
 
         # long values
-        test_val = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
-                    "sed do eiusmod tempor incididunt ut labore et dolore "
-                    "magna aliqua. Ut enim ad minim veniam, quis nostrud "
-                    "exercitation ullamco laboris nisi ut aliquip ex ea "
-                    "commodo consequat. Duis aute irure dolor in reprehenderit "
-                    "in voluptate velit esse cillum dolore eu fugiat nulla "
-                    "pariatur. Excepteur sint occaecat cupidatat non proident, "
-                    "sunt in culpa qui officia deserunt mollit anim id est "
-                    "laborum.")
+        lorem_ipsum = ("Lorem ipsum dolor sit amet, consectetur adipiscing "
+                       "elit, sed do eiusmod tempor incididunt ut labore et "
+                       "dolore magna aliqua. Ut enim ad minim veniam, quis "
+                       "nostrud exercitation ullamco laboris nisi ut aliquip "
+                       "ex ea commodo consequat. Duis aute irure dolor in "
+                       "reprehenderit in voluptate velit esse cillum dolore "
+                       "eu fugiat nulla pariatur. Excepteur sint occaecat "
+                       "cupidatat non proident, sunt in culpa qui officia "
+                       "deserunt mollit anim id est laborum.")
+        different = {
+            "channel_id": TEST_PROPERTIES["channel_id"],
+            "channel_name": lorem_ipsum,
+            "html": {
+                "about": lorem_ipsum,
+                "community": lorem_ipsum,
+                "featured_channels": lorem_ipsum,
+                "videos": lorem_ipsum
+            },
+            "last_updated": TEST_PROPERTIES["last_updated"]
+        }
         str_repr = reprlib.Repr()
         expected = {}
-        for key, val in EXPECTED_CHANNELINFO.items():
-            if key == "html":
-                val = {k: str_repr.repr(test_val)[1:-1] for k in val}
-            elif key == "channl_name":
-                val = str_repr.repr(test_val)[1:-1]
+        for key, val in different.items():
+            if isinstance(val, str):
+                val = str_repr.repr(val)[1:-1]
+            elif key == "html":
+                val = {k: str_repr.repr(v)[1:-1] for k, v in val.items()}
             info[key] = val
             expected[key] = val
         self.assertEqual(str(info), str(expected))

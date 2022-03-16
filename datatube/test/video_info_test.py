@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import reprlib
 import time
 import unittest
 from xml.dom.minidom import Attr
@@ -26,6 +27,7 @@ TEST_PROPERTIES = {
     "keywords": ["datatube", "test", "foo", "bar", "baz"],
     "thumbnail_url": "https://i.kym-cdn.com/photos/images/original/000/581/296/c09.jpg"
 }
+EXPECTED_VIDEOINFO = TEST_PROPERTIES
 JSON_PATH = Path(DATA_DIR, "test_video_info.json")
 EXPECTED_JSON = {
     "channel_id": TEST_PROPERTIES["channel_id"],
@@ -968,6 +970,183 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
         with self.assertRaises(KeyError) as err:
             info[test_key] = "something"
         self.assertEqual(str(err.exception), err_msg)
+
+
+class VideoInfoIterationTests(unittest.TestCase):
+
+    def test_items(self):
+        info = VideoInfo(**TEST_PROPERTIES)
+        self.assertEqual(tuple(info.items()), tuple(EXPECTED_VIDEOINFO.items()))
+
+    def test_keys(self):
+        info = VideoInfo(**TEST_PROPERTIES)
+        self.assertEqual(tuple(info.keys()), tuple(EXPECTED_VIDEOINFO.keys()))
+
+    def test_values(self):
+        info = VideoInfo(**TEST_PROPERTIES)
+        self.assertEqual(tuple(info.values()),
+                         tuple(EXPECTED_VIDEOINFO.values()))
+
+    def test_iter(self):
+        info = VideoInfo(**TEST_PROPERTIES)
+        expected = tuple(EXPECTED_VIDEOINFO)
+        for index, key in enumerate(info):
+            self.assertEqual(key, expected[index])
+
+
+class VideoInfoDunderTests(unittest.TestCase):
+
+    def test_contains(self):
+        info = VideoInfo(**TEST_PROPERTIES)
+
+        # True
+        for key in EXPECTED_VIDEOINFO:
+            self.assertTrue(key in info)
+
+        # False
+        self.assertFalse("" in info)  # empty string
+        self.assertFalse("this key does not exist" in info)
+
+    def test_equality_videoinfo_instances(self):
+        # True
+        info1 = VideoInfo(**TEST_PROPERTIES)
+        info2 = VideoInfo(**TEST_PROPERTIES)
+        self.assertEqual(info1, info2)
+
+        # False
+        different = {
+            "channel_id": "UC_different_from_info1_",
+            "channel_name": "Some Other Channel Name",
+            "video_id": "_different_",
+            "video_title": "Some Other Video Title",
+            "publish_date": datetime(1950, 1, 1, tzinfo=timezone.utc),
+            "last_updated": datetime.now(timezone.utc),
+            "duration": timedelta(hours=1),
+            "description": "Some Other Description",
+            "keywords": ["foo", "bar", "baz"],
+            "thumbnail_url": "https://i.kym-cdn.com/entries/icons/mobile/000/023/397/C-658VsXoAo3ovC.jpg"
+        }
+        for key, test_val in different.items():
+            self.assertNotEqual(test_val, TEST_PROPERTIES[key])
+            info3 = VideoInfo(**{**TEST_PROPERTIES, key: test_val})
+            self.assertNotEqual(info1, info3)
+
+    def test_equality_base_dict(self):
+        # True
+        info = VideoInfo(**TEST_PROPERTIES)
+        self.assertEqual(info, EXPECTED_VIDEOINFO)
+
+        # False - unequal values
+        different = {
+            "channel_id": "UC_different_from_info1_",
+            "channel_name": "Some Other Channel Name",
+            "video_id": "_different_",
+            "video_title": "Some Other Video Title",
+            "publish_date": datetime(1950, 1, 1, tzinfo=timezone.utc),
+            "last_updated": datetime.now(timezone.utc),
+            "duration": timedelta(hours=1),
+            "description": "Some Other Description",
+            "keywords": ["foo", "bar", "baz"],
+            "thumbnail_url": "https://i.kym-cdn.com/entries/icons/mobile/000/023/397/C-658VsXoAo3ovC.jpg"
+        }
+        for key, test_val in different.items():
+            self.assertNotEqual(test_val, TEST_PROPERTIES[key])
+            expected = {**EXPECTED_VIDEOINFO, key: test_val}
+            self.assertNotEqual(info, expected)
+
+        # False - missing/extra key
+        for key in TEST_PROPERTIES:
+            missing = {k: v for k, v in EXPECTED_VIDEOINFO.items() if k != key}
+            self.assertNotEqual(info, missing)
+        self.assertNotIn("extra key", EXPECTED_VIDEOINFO)
+        self.assertNotEqual(info, {**EXPECTED_VIDEOINFO,
+                                   "extra key": "some value"})
+
+    def test_hash(self):
+        # equal values
+        info1 = VideoInfo(**TEST_PROPERTIES, immutable=True)
+        info2 = VideoInfo(**TEST_PROPERTIES, immutable=True)
+        self.assertEqual(hash(info1), hash(info2))
+
+        # unequal values
+        different = {
+            "channel_id": "UC_different_from_info1_",
+            "channel_name": "Some Other Channel Name",
+            "video_id": "_different_",
+            "video_title": "Some Other Video Title",
+            "publish_date": datetime(1950, 1, 1, tzinfo=timezone.utc),
+            "last_updated": datetime.now(timezone.utc),
+            "duration": timedelta(hours=1),
+            "description": "Some Other Description",
+            "keywords": ["foo", "bar", "baz"],
+            "thumbnail_url": "https://i.kym-cdn.com/entries/icons/mobile/000/023/397/C-658VsXoAo3ovC.jpg"
+        }
+        for key, test_val in different.items():
+            self.assertNotEqual(test_val, TEST_PROPERTIES[key])
+            info3 = VideoInfo(**{**TEST_PROPERTIES, key: test_val},
+                              immutable=True)
+            self.assertNotEqual(hash(info1), hash(info3))
+
+        # instance not immutable
+        info4 = VideoInfo(**TEST_PROPERTIES, immutable=False)
+        with self.assertRaises(TypeError) as err:
+            hash(info4)
+        err_msg = ""
+        self.assertEqual(str(err.exception), err_msg)
+
+    def test_len(self):
+        info = VideoInfo(**TEST_PROPERTIES)
+        self.assertEqual(len(info), len(EXPECTED_VIDEOINFO))
+
+    def test_repr(self):
+        fields = {**TEST_PROPERTIES, "immutable": False}
+        str_repr = reprlib.Repr()
+        formatted = []
+        for k, v in fields.items():
+            if isinstance(v, str):
+                formatted.append(f"{k}={str_repr.repr(v)}")
+            else:
+                formatted.append(f"{k}={repr(v)}")
+        expected = f"VideoInfo({', '.join(formatted)})"
+        info = VideoInfo(**TEST_PROPERTIES)
+        self.assertEqual(repr(info), expected)
+
+    def test_str(self):
+        info = VideoInfo(**TEST_PROPERTIES)
+
+        # short values
+        self.assertEqual(str(info), str(EXPECTED_VIDEOINFO))
+
+        # long values
+        lorem_ipsum = ("Lorem ipsum dolor sit amet, consectetur adipiscing "
+                       "elit, sed do eiusmod tempor incididunt ut labore et "
+                       "dolore magna aliqua. Ut enim ad minim veniam, quis "
+                       "nostrud exercitation ullamco laboris nisi ut aliquip "
+                       "ex ea commodo consequat. Duis aute irure dolor in "
+                       "reprehenderit in voluptate velit esse cillum dolore "
+                       "eu fugiat nulla pariatur. Excepteur sint occaecat "
+                       "cupidatat non proident, sunt in culpa qui officia "
+                       "deserunt mollit anim id est laborum.")
+        different = {
+            "channel_id": TEST_PROPERTIES["channel_id"],
+            "channel_name": lorem_ipsum,
+            "video_id": TEST_PROPERTIES["video_id"],
+            "video_title": lorem_ipsum,
+            "publish_date": TEST_PROPERTIES["publish_date"],
+            "last_updated": TEST_PROPERTIES["last_updated"],
+            "duration": TEST_PROPERTIES["duration"],
+            "description": lorem_ipsum,
+            "keywords": TEST_PROPERTIES["keywords"],
+            "thumbnail_url": TEST_PROPERTIES["thumbnail_url"]
+        }
+        str_repr = reprlib.Repr()
+        expected = {}
+        for key, val in different.items():
+            if isinstance(val, str):
+                val = str_repr.repr(val)[1:-1]
+            info[key] = val
+            expected[key] = val
+        self.assertEqual(str(info), str(expected))
 
 
 class VideoInfoJSONTests(unittest.TestCase):
