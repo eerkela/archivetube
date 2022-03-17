@@ -2,11 +2,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import reprlib
-import time
 import unittest
-from xml.dom.minidom import Attr
-
-from pyrsistent import immutable
 
 if __name__ == "__main__":
     import sys
@@ -24,10 +20,10 @@ TEST_PROPERTIES = {
     "last_updated": datetime.now(timezone.utc),
     "duration": timedelta(minutes=5),
     "description": "Video description...",
-    "keywords": ["datatube", "test", "foo", "bar", "baz"],
+    "keywords": ("datatube", "test", "foo", "bar", "baz"),
     "thumbnail_url": "https://i.kym-cdn.com/photos/images/original/000/581/296/c09.jpg"
 }
-EXPECTED_VIDEOINFO = TEST_PROPERTIES
+EXPECTED_VIDEOINFO = {k: v for k, v in sorted(TEST_PROPERTIES.items())}
 JSON_PATH = Path(DATA_DIR, "test_video_info.json")
 EXPECTED_JSON = {
     "channel_id": TEST_PROPERTIES["channel_id"],
@@ -38,7 +34,7 @@ EXPECTED_JSON = {
     "last_updated": TEST_PROPERTIES["last_updated"].isoformat(),
     "duration": TEST_PROPERTIES["duration"].total_seconds(),
     "description": TEST_PROPERTIES["description"],
-    "keywords": TEST_PROPERTIES["keywords"],
+    "keywords": list(TEST_PROPERTIES["keywords"]),
     "thumbnail_url": TEST_PROPERTIES["thumbnail_url"]
 }
 DB_NAME = "datatube_test"
@@ -268,7 +264,7 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
         self.assertNotEqual(test_val, TEST_PROPERTIES["video_id"])
 
         # from init
-        info = VideoInfo(**{**TEST_PROPERTIES, "video": test_val})
+        info = VideoInfo(**{**TEST_PROPERTIES, "video_id": test_val})
         self.assertEqual(info.video_id, test_val)
 
         # from property getter/setter
@@ -302,7 +298,9 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_video_id_bad_type(self):
         test_val = 123
         self.assertNotIsInstance(test_val, str)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.video_id] `video_id` must be an "
+                   f"11-character video ID string (received object of type: "
+                   f"{type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -323,7 +321,8 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_video_id_bad_length(self):
         test_val = "not11characters"
         self.assertNotEqual(len(test_val), 11)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.video_id] `video_id` must be an "
+                   f"11-character video ID string (received: {repr(test_val)})")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -362,10 +361,11 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_video_title_immutable_instance(self):
         test_val = "Some Other Video Title"
         self.assertNotEqual(test_val, TEST_PROPERTIES["video_title"])
-        err_msg = ""
+        err_msg = ("[datatube.info.VideoInfo.video_title] cannot reassign "
+                   "`video_title`: VideoInfo instance is immutable")
 
         # from property getter/setter
-        info = VideoInfo(**TEST_PROPERTIES)
+        info = VideoInfo(**TEST_PROPERTIES, immutable=True)
         with self.assertRaises(AttributeError) as err:
             info.video_title = test_val
         self.assertEqual(str(err.exception), err_msg)
@@ -378,7 +378,9 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_video_title_bad_type(self):
         test_val = 123
         self.assertNotIsInstance(test_val, str)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.video_title] `video_title` must "
+                   f"be a non-empty string (received object of type: "
+                   f"{type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -399,7 +401,8 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_video_title_empty_string(self):
         test_val = ""
         self.assertEqual(test_val, "")
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.video_title] `video_title` must "
+                   f"be a non-empty string (received: {repr(test_val)})")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -418,7 +421,7 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
         self.assertEqual(str(err.exception), err_msg)
 
     def test_set_publish_date(self):
-        test_val = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        test_val = datetime(1950, 1, 1, tzinfo=timezone.utc)
         self.assertNotEqual(test_val, TEST_PROPERTIES["publish_date"])
 
         # from init
@@ -438,10 +441,11 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_publish_date_immutable_instance(self):
         test_val = datetime(202, 1, 1, tzinfo=timezone.utc)
         self.assertNotEqual(test_val, TEST_PROPERTIES["publish_date"])
-        err_msg = ""
+        err_msg = ("[datatube.info.VideoInfo.publish_date] cannot reassign "
+                   "`publish_date`: VideoInfo instance is immutable")
 
         # from property getter/setter
-        info = VideoInfo(**TEST_PROPERTIES)
+        info = VideoInfo(**TEST_PROPERTIES, immutable=True)
         with self.assertRaises(AttributeError) as err:
             info.publish_date = test_val
         self.assertEqual(str(err.exception), err_msg)
@@ -454,7 +458,10 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_publish_date_bad_type(self):
         test_val = 123
         self.assertNotIsInstance(test_val, datetime)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.publish_date] `publish_date` "
+                   f"must be a timezone-aware datetime.datetime object "
+                   f"stating when this video was uploaded to youtube "
+                   f"(received object of type: {type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -475,28 +482,10 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_publish_date_has_no_timezone(self):
         test_val = datetime(2020, 1, 1)
         self.assertIsNone(test_val.tzinfo)
-        err_msg = ""
-
-        # from init
-        with self.assertRaises(ValueError) as err:
-            VideoInfo(**{**TEST_PROPERTIES, "publish_date": test_val})
-        self.assertEqual(str(err.exception), err_msg)
-
-        # from property getter/setter
-        info = VideoInfo(**TEST_PROPERTIES)
-        with self.assertRaises(ValueError) as err:
-            info.publish_date = test_val
-        self.assertEqual(str(err.exception), err_msg)
-
-        # from getitem/setitem
-        with self.assertRaises(ValueError) as err:
-            info["publish_date"] = test_val
-        self.assertEqual(str(err.exception), err_msg)
-
-    def test_set_publish_date_in_future(self):
-        test_val = datetime(9999, 12, 31, tzinfo=timezone.utc)
-        self.assertGreater(test_val, datetime.now(timezone.utc))
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.publish_date] `publish_date` "
+                   f"must be a timezone-aware datetime.datetime object "
+                   f"stating when this video was uploaded to youtube "
+                   f"(datetime has no timezone: {repr(test_val)})")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -517,12 +506,23 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_publish_date_greater_than_last_updated(self):
         test_val = datetime.now(timezone.utc)
         self.assertGreater(test_val, TEST_PROPERTIES["last_updated"])
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.publish_date] `publish_date` "
+                   f"must be a timezone-aware datetime.datetime object "
+                   f"stating when this video was uploaded to youtube "
+                   f"(datetime cannot be greater than `last_updated`: "
+                   f"{test_val} > {TEST_PROPERTIES['last_updated']})")
 
-        # from init
+        # from init - this gets a different error message than expected because
+        # of coupling with `last_updated`, which is defined after `publish_date`
         with self.assertRaises(ValueError) as err:
             VideoInfo(**{**TEST_PROPERTIES, "publish_date": test_val})
-        self.assertEqual(str(err.exception), err_msg)
+        coupled_err_msg = (f"[datatube.info.VideoInfo.last_updated] "
+                           f"`last_updated` must be a timezone-aware "
+                           f"datetime.datetime object stating the last time "
+                           f"this video's data was requested from YouTube "
+                           f"(datetime cannot be less than `publish_date`: "
+                           f"{TEST_PROPERTIES['last_updated']} < {test_val})")
+        self.assertEqual(str(err.exception), coupled_err_msg)
 
         # from property getter/setter
         info = VideoInfo(**TEST_PROPERTIES)
@@ -555,10 +555,11 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_last_updated_immutable_instance(self):
         test_val = datetime.now(timezone.utc)
         self.assertNotEqual(test_val, TEST_PROPERTIES["last_updated"])
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.last_updated] cannot reassign "
+                   f"`last_updated`: VideoInfo instance is immutable")
 
         # from property getter/setter
-        info = VideoInfo(**TEST_PROPERTIES)
+        info = VideoInfo(**TEST_PROPERTIES, immutable=True)
         with self.assertRaises(AttributeError) as err:
             info.last_updated = test_val
         self.assertEqual(str(err.exception), err_msg)
@@ -571,7 +572,10 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_last_updated_bad_type(self):
         test_val = 123
         self.assertNotIsInstance(test_val, datetime)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.last_updated] `last_updated` "
+                   f"must be a timezone-aware datetime.datetime object "
+                   f"stating the last time this video's data was requested "
+                   f"from YouTube (received object of type: {type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -592,7 +596,10 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_last_updated_has_no_timezone(self):
         test_val = datetime.now()
         self.assertIsNone(test_val.tzinfo)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.last_updated] `last_updated` "
+                   f"must be a timezone-aware datetime.datetime object "
+                   f"stating the last time this video's data was requested "
+                   f"from YouTube (datetime has no timezone: {repr(test_val)})")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -613,28 +620,37 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_last_updated_in_future(self):
         test_val = datetime(9999, 12, 31, tzinfo=timezone.utc)
         self.assertGreater(test_val, datetime.now(timezone.utc))
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.last_updated] `last_updated` "
+                   f"must be a timezone-aware datetime.datetime object "
+                   f"stating the last time this video's data was requested "
+                   f"from YouTube (datetime cannot be in the future: "
+                   f"{test_val} > ")
 
         # from init
         with self.assertRaises(ValueError) as err:
             VideoInfo(**{**TEST_PROPERTIES, "last_updated": test_val})
-        self.assertEqual(str(err.exception), err_msg)
+        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
         # from property getter/setter
         info = VideoInfo(**TEST_PROPERTIES)
         with self.assertRaises(ValueError) as err:
             info.last_updated = test_val
-        self.assertEqual(str(err.exception), err_msg)
+        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
         # from getitem/setitem
         with self.assertRaises(ValueError) as err:
             info["last_updated"] = test_val
-        self.assertEqual(str(err.exception), err_msg)
+        self.assertEqual(str(err.exception)[:len(err_msg)], err_msg)
 
     def test_set_last_updated_less_than_publish_date(self):
         test_val = datetime(1950, 1, 1, tzinfo=timezone.utc)
         self.assertLess(test_val, TEST_PROPERTIES["publish_date"])
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.last_updated] `last_updated` "
+                   f"must be a timezone-aware datetime.datetime object "
+                   f"stating the last time this video's data was requested "
+                   f"from YouTube (datetime cannot be less than "
+                   f"`publish_date`: {test_val} < "
+                   f"{TEST_PROPERTIES['publish_date']})")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -673,7 +689,8 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_duration_immutable_instance(self):
         test_val = timedelta(seconds=10)
         self.assertNotEqual(test_val, TEST_PROPERTIES["duration"])
-        err_msg = ""
+        err_msg = ("[datatube.info.VideoInfo.duration] cannot reassign "
+                   "`duration`: VideoInfo instance is immutable")
 
         # from property getter/setter
         info = VideoInfo(**TEST_PROPERTIES, immutable=True)
@@ -689,7 +706,9 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_duration_bad_type(self):
         test_val = 123
         self.assertNotIsInstance(test_val, timedelta)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.duration] `duration` must be a "
+                   f"datetime.timedelta object describing the video's total "
+                   f"runtime (received object of type: {type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -710,7 +729,10 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_duration_negative_interval(self):
         test_val = timedelta(seconds=-1)
         self.assertLess(test_val, timedelta())
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.duration] `duration` must be a "
+                   f"datetime.timedelta object describing the video's total "
+                   f"runtime (duration cannot be negative: {test_val} < "
+                   f"{timedelta()})")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -749,10 +771,11 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_description_immutable_instance(self):
         test_val = "Some Other Description"
         self.assertNotEqual(test_val, TEST_PROPERTIES["description"])
-        err_msg = ""
+        err_msg = ("[datatube.info.VideoInfo.description] cannot reassign "
+                   "`description`: VideoInfo instance is immutable")
 
         # from property getter/setter
-        info = VideoInfo(**TEST_PROPERTIES)
+        info = VideoInfo(**TEST_PROPERTIES, immutable=True)
         with self.assertRaises(AttributeError) as err:
             info.description = test_val
         self.assertEqual(str(err.exception), err_msg)
@@ -765,7 +788,8 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_description_bad_type(self):
         test_val = 123
         self.assertNotIsInstance(test_val, str)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.description] `description` must "
+                   f"be a string (received object of type: {type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -779,7 +803,7 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
         self.assertEqual(str(err.exception), err_msg)
 
     def test_set_keywords(self):
-        test_val = ["these", "are", "different", "from", "normal"]
+        test_val = ("these", "are", "different", "from", "normal")
         self.assertNotEqual(test_val, TEST_PROPERTIES["keywords"])
 
         # from init
@@ -799,7 +823,8 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_keywords_immutable_instance(self):
         test_val = ["these", "are", "different", "from", "normal"]
         self.assertNotEqual(test_val, TEST_PROPERTIES["keywords"])
-        err_msg = ""
+        err_msg = ("[datatube.info.VideoInfo.keywords] cannot reassign "
+                   "`keywords`: VideoInfo instance is immutable")
 
         # from property getter/setter
         info = VideoInfo(**TEST_PROPERTIES, immutable=True)
@@ -815,7 +840,9 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_keywords_bad_type(self):
         test_val = "does not accept naked strings"
         self.assertNotIsInstance(test_val, (list, tuple, set))
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.keywords] `keywords` must be a "
+                   f"list, tuple, or set of keyword strings associated with "
+                   f"this video (received object of type: {type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -836,7 +863,10 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_keywords_bad_keyword_type(self):
         test_val = ["fine", "great", 123]
         self.assertFalse(all(isinstance(k, str) for k in test_val))
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.keywords] `keywords` must be a "
+                   f"list, tuple, or set of keyword strings associated with "
+                   f"this video (received keyword of type: "
+                   f"{type(test_val[2])})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -857,7 +887,9 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_keywords_empty_string(self):
         test_val = ["fine", "great", ""]
         self.assertFalse(all(test_val))
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.keywords] `keywords` must be a "
+                   f"list, tuple, or set of keyword strings associated with "
+                   f"this video (received empty keyword at index: 2)")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -896,7 +928,8 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_thumbnail_url_immutable_instance(self):
         test_val = "https://i.kym-cdn.com/entries/icons/mobile/000/023/397/C-658VsXoAo3ovC.jpg"
         self.assertNotEqual(test_val, TEST_PROPERTIES["thumbnail_url"])
-        err_msg = ""
+        err_msg = ("[datatube.info.VideoInfo.thumbnail_url] cannot reassign "
+                   "`thumbnail_url`: VideoInfo instance is immutable")
 
         # from property getter/setter
         info = VideoInfo(**TEST_PROPERTIES, immutable=True)
@@ -912,7 +945,9 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_thumbnail_url_bad_type(self):
         test_val = 123
         self.assertNotIsInstance(test_val, str)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.thumbnail_url] `thumbnail_url` "
+                   f"must be a valid url string (received object of type: "
+                   f"{type(test_val)})")
 
         # from init
         with self.assertRaises(TypeError) as err:
@@ -933,7 +968,8 @@ class VideoInfoGetterSetterTests(unittest.TestCase):
     def test_set_thumbnail_url_not_a_url(self):
         test_val = "this is not a valid url"
         self.assertNotEqual(test_val, TEST_PROPERTIES["thumbnail_url"])
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.thumbnail_url] `thumbnail_url` "
+                   f"must be a valid url string (not a valid url: {test_val})")
 
         # from init
         with self.assertRaises(ValueError) as err:
@@ -1091,7 +1127,8 @@ class VideoInfoDunderTests(unittest.TestCase):
         info4 = VideoInfo(**TEST_PROPERTIES, immutable=False)
         with self.assertRaises(TypeError) as err:
             hash(info4)
-        err_msg = ""
+        err_msg = ("[datatube.info.VideoInfo.__hash__] PropertyDict cannot be "
+                   "hashed: instance must be immutable")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_len(self):
@@ -1113,9 +1150,12 @@ class VideoInfoDunderTests(unittest.TestCase):
 
     def test_str(self):
         info = VideoInfo(**TEST_PROPERTIES)
+        str_repr = reprlib.Repr()
 
         # short values
-        self.assertEqual(str(info), str(EXPECTED_VIDEOINFO))
+        shortened_url = str_repr.repr(TEST_PROPERTIES["thumbnail_url"])[1:-1]
+        self.assertEqual(str(info), str({**EXPECTED_VIDEOINFO,
+                                         "thumbnail_url": shortened_url}))
 
         # long values
         lorem_ipsum = ("Lorem ipsum dolor sit amet, consectetur adipiscing "
@@ -1130,21 +1170,20 @@ class VideoInfoDunderTests(unittest.TestCase):
         different = {
             "channel_id": TEST_PROPERTIES["channel_id"],
             "channel_name": lorem_ipsum,
-            "video_id": TEST_PROPERTIES["video_id"],
-            "video_title": lorem_ipsum,
-            "publish_date": TEST_PROPERTIES["publish_date"],
-            "last_updated": TEST_PROPERTIES["last_updated"],
-            "duration": TEST_PROPERTIES["duration"],
             "description": lorem_ipsum,
+            "duration": TEST_PROPERTIES["duration"],
             "keywords": TEST_PROPERTIES["keywords"],
-            "thumbnail_url": TEST_PROPERTIES["thumbnail_url"]
+            "last_updated": TEST_PROPERTIES["last_updated"],
+            "publish_date": TEST_PROPERTIES["publish_date"],
+            "thumbnail_url": TEST_PROPERTIES["thumbnail_url"],
+            "video_id": TEST_PROPERTIES["video_id"],
+            "video_title": lorem_ipsum
         }
-        str_repr = reprlib.Repr()
         expected = {}
         for key, val in different.items():
+            info[key] = val
             if isinstance(val, str):
                 val = str_repr.repr(val)[1:-1]
-            info[key] = val
             expected[key] = val
         self.assertEqual(str(info), str(expected))
 
@@ -1192,7 +1231,8 @@ class VideoInfoJSONTests(unittest.TestCase):
         self.assertNotIsInstance(test_val, Path)
         with self.assertRaises(TypeError) as err:
             VideoInfo.from_json(test_val)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.from_json] `json_path` must be "
+                   f"Path-like (received object of type: {type(test_val)})")
         self.assertEqual(str(err.exception), err_msg)
 
         # path does not exist
@@ -1200,7 +1240,8 @@ class VideoInfoJSONTests(unittest.TestCase):
         self.assertFalse(test_val.exists())
         with self.assertRaises(ValueError) as err:
             VideoInfo.from_json(test_val)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.from_json] `json_path` does not "
+                   f"exist: {test_val}")
         self.assertEqual(str(err.exception), err_msg)
 
         # path points to directory
@@ -1208,7 +1249,8 @@ class VideoInfoJSONTests(unittest.TestCase):
         self.assertTrue(test_val.is_dir())
         with self.assertRaises(ValueError) as err:
             VideoInfo.from_json(test_val)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.from_json] `json_path` does not "
+                   f"point to a .json file: {test_val}")
         self.assertEqual(str(err.exception), err_msg)
 
         # file does not end in .json
@@ -1218,7 +1260,8 @@ class VideoInfoJSONTests(unittest.TestCase):
         with self.assertRaises(ValueError) as err:
             VideoInfo.from_json(test_val)
         test_val.unlink()
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.from_json] `json_path` does not "
+                   f"point to a .json file: {test_val}")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_to_json_errors(self):
@@ -1229,7 +1272,8 @@ class VideoInfoJSONTests(unittest.TestCase):
         self.assertNotIsInstance(test_val, Path)
         with self.assertRaises(TypeError) as err:
             info.to_json(test_val)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.to_json] `save_to` must be "
+                   f"Path-like (received object of type: {type(test_val)})")
         self.assertEqual(str(err.exception), err_msg)
 
         # path points to directory
@@ -1237,7 +1281,8 @@ class VideoInfoJSONTests(unittest.TestCase):
         self.assertTrue(test_val.is_dir())
         with self.assertRaises(ValueError) as err:
             info.to_json(test_val)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.to_json] `save_to` must end "
+                   f"with a .json file extension (received: {test_val})")
         self.assertEqual(str(err.exception), err_msg)
 
         # file does not end in .json
@@ -1245,7 +1290,8 @@ class VideoInfoJSONTests(unittest.TestCase):
         self.assertNotEqual(test_val.suffix, ".json")
         with self.assertRaises(ValueError) as err:
             info.to_json(test_val)
-        err_msg = ""
+        err_msg = (f"[datatube.info.VideoInfo.to_json] `save_to` must end "
+                   f"with a .json file extension (received: {test_val})")
         self.assertEqual(str(err.exception), err_msg)
 
 
