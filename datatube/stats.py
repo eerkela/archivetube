@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -10,43 +11,122 @@ from datatube.check import is_video_id
 from datatube.error import error_trace
 
 
+AVAILABLE_DTYPES = (object, int, float, complex, str, bool, datetime, timedelta)
+
+
 def check_dtypes(data: pd.DataFrame, **kwargs) -> bool:
-    dtype_lookup = {
+    dtype_lookup = {  # order indicates priority in kwargless lookup
+        object: pdtypes.is_object_dtype,  # convert_dtypes -> not a str
         int: pdtypes.is_integer_dtype,
         float: pdtypes.is_float_dtype,
-        "numeric": pdtypes.is_numeric_dtype,
+        complex: pdtypes.is_complex_dtype,
+        # "numeric": pdtypes.is_numeric_dtype,
         str: pdtypes.is_string_dtype,
         bool: pdtypes.is_bool_dtype,
-        datetime: pdtypes.is_datetime64_dtype,
+        datetime: pdtypes.is_datetime64_any_dtype,
         timedelta: pdtypes.is_timedelta64_dtype
     }
+    # convert_dtypes always emits a ComplexWarning on complex-valued columns
+    warnings.simplefilter("ignore", np.ComplexWarning)
+
+    # kwargless
+    if len(kwargs) == 0:
+        result = {}
+        for col_name in data.columns:
+            try:
+                column = data[col_name].convert_dtypes()
+            except TypeError:
+                column = data[col_name]
+            for typespec, typecheck in dtype_lookup.items():
+                if typecheck(column):
+                    result[col_name] = typespec
+                    break
+        return result
+
+    def check_column(col_name, typespec):
+        try:
+            column = data[col_name].convert_dtypes()
+        except TypeError:
+            column = data[col_name]
+        
+        # single typespec
+        if not isinstance(typespec, (tuple, list, set)):
+            if typespec == str and dtype_lookup[object](column):
+                return False  # column is better described as object
+            return dtype_lookup[typespec](column)
+
+        # multiple typespecs
+        results = []
+        for ts in typespec:
+            if ts == str and dtype_lookup[object](column):
+                results.append(False)
+            else:
+                results.append(dtype_lookup[ts](column))
+        return any(results)
+
+    return all(check_column(col_name, typespec)
+               for col_name, typespec in kwargs.items())
+
+
+    # kwargs
     for col_name, typespec in kwargs.items():
-        column = data[col_name].convert_dtypes()
-        typecheck = dtype_lookup[typespec]
-        if not typecheck(column) and len(column.dropna()) > 0:
+        try:
+            # conversion differentiates between int and float w/ NA
+            column = data[col_name].convert_dtypes()
+        except TypeError:
+            column = data[col_name]
+        # differentiate between str and object
+        if typespec == str and dtype_lookup[object](column):
+            return False
+        if not dtype_lookup[typespec](column):
             return False
     return True
 
 
 def coerce_dtypes(data: pd.DataFrame, **kwargs) -> pd.DataFrame:
     dtype_lookup = {
+        object: np.dtype("O"),
         int: pd.Int64Dtype(),  # numpy: np.dtype(np.int64)  NOT NULLABLE
         float: pd.Float64Dtype(),  # numpy: np.dtype(np.float64)
-        "numeric": pd.Float64Dtype(),  # numpy: np.dtype(np.float64)
+        complex: np.dtype(np.complex128),
+        # "numeric": pd.Float64Dtype(),  # numpy: np.dtype(np.float64)
         str: pd.StringDtype(),  # numpy: np.dtype("O")
         bool: pd.BooleanDtype(),  # numpy: np.dtype("bool")
         datetime: np.dtype("datetime64[ns]"),
-        timedelta: np.dtype("timedelta64[ns]"),
+        timedelta: np.dtype("timedelta64[ns]")
     }
+
+    # kwargless
+    if len(kwargs) == 0:
+        atomics = [t.__name__ if isinstance(t, type) else str(t)
+                   for t in dtype_lookup]
+        err_msg = (f"[{error_trace()}] `coerce_dtypes` must be invoked with "
+                   f"at least one keyword argument mapping a column in `data` "
+                   f"to an atomic data type: {tuple(atomics)}")
+        raise RuntimeError(err_msg)
+
+    # kwargs
     result = data.copy()
     for col_name, typespec in kwargs.items():
-        result[col_name] = result[col_name].astype(dtype_lookup[typespec])
+        if check_dtypes(data, **{col_name: typespec}):
+            continue
+        try:
+            result[col_name] = result[col_name].astype(dtype_lookup[typespec])
+        except KeyError as exc:
+            atomics = [t.__name__ if isinstance(t, type) else str(t)
+                       for t in dtype_lookup]
+            err_msg = (f"[{error_trace()}] typespec not recognized: {typespec} "
+                       f"(available values: {set(atomics)})")
+            raise KeyError(err_msg) from exc
     return result
 
 
 class Stats:
 
-    def __init__(self, data: pd.DataFrame | None = None):
+    def __init__(self,
+                 data: pd.DataFrame | None = None,
+                 interpolate: bool = False,
+                 immutable: bool = False):
         expected_columns = {
             "video_id": (str, False),
             "timestamp": (datetime, False),

@@ -16,6 +16,7 @@ from tqdm import tqdm
 from datatube import DATATUBE_VERSION_NUMBER, VIDEO_DIR, AVAILABLE_SOURCES
 from datatube.error import error_trace
 import datatube.check as check
+from datatube.info import VideoInfo
 
 
 """
@@ -412,28 +413,17 @@ class Video:
 
     def __init__(self,
                  source: str,
-                 video_id: str,
-                 video_title: str,
-                 publish_date: datetime,
-                 last_updated: datetime,
-                 duration: timedelta,
+                 info: VideoInfo,
                  views: int,
                  rating: float | None = None,
                  likes: int | None = None,
                  dislikes: int | None = None,
-                 description: str | None = None,
-                 keywords: list[str] = [],
-                 thumbnail_url: str | None = None,
                  target_dir: Path | None = None,
                  streams: pytube.StreamQuery | None = None,
                  captions: pytube.CaptionQuery | None = None,
                  channel: Channel | None = None):
         self.source = source
-        self.id = video_id
-        self.title = video_title
-        self.publish_date = publish_date
-        self.last_updated = last_updated
-        self.duration = duration
+        self.info = info
         stats_dict = {
             "views": views,
             "rating": rating,
@@ -441,9 +431,6 @@ class Video:
             "dislikes": dislikes
         }
         self.stats = {k: v for k, v in stats_dict.items() if v is not None}
-        self.description = description
-        self.keywords = keywords
-        self.thumbnail_url = thumbnail_url
         self.channel = channel
         self.streams = streams
         self.captions = captions

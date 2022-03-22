@@ -524,7 +524,7 @@ class VideoInfo(PropertyDict):
         self._duration = new_duration
 
     @property
-    def keywords(self) -> list[str]:
+    def keywords(self) -> list[str] | tuple[str]:
         return self._keywords
 
     @keywords.setter
@@ -545,7 +545,10 @@ class VideoInfo(PropertyDict):
             if not keyword:
                 context = f"(received empty keyword at index: {index})"
                 raise ValueError(f"{err_msg} {context}")
-        self._keywords = tuple(new_keywords)
+        if self.immutable:
+            self._keywords = tuple(new_keywords)
+        else:
+            self._keywords = list(new_keywords)
 
     @property
     def last_updated(self) -> datetime:
