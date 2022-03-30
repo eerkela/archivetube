@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import random
-from sre_constants import ASSERT_NOT
 import unittest
 
 import pandas as pd
@@ -15,18 +14,19 @@ from datatube.stats import AVAILABLE_DTYPES, Stats, check_dtypes, coerce_dtypes
 
 
 TEST_PROPERTIES = {
-    "video_id": "test_video_",
-    "timestamp": datetime.now(),
-    "views": 100,
-    "rating": 4.25,
-    "likes": 34,
-    "dislikes": 6
+    "video_id": ["video_id_01", "video_id_01"],
+    "timestamp": [datetime(2020, 1, 1, tzinfo=timezone.utc),
+                  datetime(2020, 1, 2, tzinfo=timezone.utc)],
+    "views": [100, 120],
+    "rating": [4.75, 4.58333],
+    "likes": [19, 22],
+    "dislikes": [1, 2]
 }
 EXPECTED_TYPES = {
     "video_id": str,
     "timestamp": datetime,
     "views": int,
-    "rating": "numeric",
+    "rating": float,
     "likes": int,
     "dislikes": int
 }
@@ -81,9 +81,47 @@ class DTypeTests(unittest.TestCase):
         "i": (object, str)
     }
 
+    size = 3
+    test_data = {
+        int: {
+            True: {
+                "natural numbers": [i + 1 for i in range(size)],
+                "integers": [-1 * size / 2 + i + 1 for i in range(size)],
+                ""
+            },
+            False: {
+                "floats"
+            }
+        },
+        float: {"floats": [i + 1.5 for i in range(size)]},
+        complex: {"complex": [complex(i + 1, i + 1) for i in range(size)]},
+        str: {"strings": [chr(i % 26 + ord("a")) for i in range(size)]},
+        bool: {"booleans": [bool((i + 1) % 2) for i in range(size)]},
+        datetime: {"datetimes": [datetime.fromtimestamp(i)
+                                 for i in range(size)]},  # no tzinfo
+        timedelta: {"timedeltas": [timedelta(seconds=i + 1)
+                                   for i in range(size)]},
+        object: {"Nones": [None for i in range(size)]}
+    }
+
     def test_check_dtypes_kwargless_no_na(self):
         result = check_dtypes(self.no_na)
         self.assertEqual(result, self.expected_types)
+
+    def test_check_int_dtype(self):
+        """Iteratively"""
+        for typespec, data in self.test_data.items():
+            test_df = pd.DataFrame(data)
+            for col_name in data:
+                result = check_dtypes(test_df, **{col_name: int})
+                expected = typespec == int
+                try:
+                    self.assertEqual(result, expected)
+                except AssertionError as exc:
+                    context = (f"check_dtype(test_df, {col_name}=int) != "
+                               f"{expected}\n{test_df.head()}")
+                    raise AssertionError(context) from exc
+
 
     def test_check_dtypes_kwargless_with_na(self):
         result = check_dtypes(self.with_na)
@@ -127,6 +165,11 @@ class DTypeTests(unittest.TestCase):
             result = check_dtypes(self.with_na, **{col_name: all_dtypes})
             self.assertTrue(result)
 
+    def test_check_dtypes_datetime_mixed_timezones(self):
+        test_df = pd.DataFrame({"timestamp": [datetime.now(timezone.utc),
+                                              datetime.now()]})
+        self.assertTrue(check_dtypes(test_df, timestamp=datetime))
+
     def test_coerce_dtypes_kwargless_error(self):
         atomics = [t.__name__ if isinstance(t, type) else str(t)
                    for t in AVAILABLE_DTYPES]
@@ -138,12 +181,12 @@ class DTypeTests(unittest.TestCase):
             coerce_dtypes(self.no_na)
         self.assertEqual(str(err.exception), err_msg)
 
-    def test_coerce_dtypes_kwargs_no_na(self):
+    def test_coerce_dtypes_kwargs_no_na_no_errors(self):
         for col_name, expected in self.conversions.items():
             for conv in expected:
                 coerce_dtypes(self.no_na, **{col_name: conv})
 
-    def test_coerce_dtypes_kwargs_with_na(self):
+    def test_coerce_dtypes_kwargs_with_na_no_errors(self):
         for col_name, expected in self.conversions.items():
             for conv in expected:
                 coerce_dtypes(self.with_na, **{col_name: conv})
@@ -172,61 +215,147 @@ class DTypeTests(unittest.TestCase):
         result = coerce_dtypes(self.with_na, a=float)
         self.assertNotEqual(list(result.dtypes), list(self.with_na.dtypes))
 
+    def test_coerce_dtypes_datetime_preserves_timezone(self):
+        raise NotImplementedError()
 
-# class StatsInitTests(unittest.TestCase):
 
-#     def test_no_input(self):
-#         stats = Stats()
-#         expected_cols = ("video_id", "timestamp", "views", "rating", "likes",
-#                          "dislikes")
-#         self.assertEqual(tuple(stats.data.columns), expected_cols)
-#         # check dtypes
-#         self.assertEqual(len(stats.data), 0)
+class StatsInitTests(unittest.TestCase):
 
-#     def test_single_video_good_input(self):
-#         test_data = pd.DataFrame({
-#             "video_id": ["video_id_01", "video_id_01"],
-#             "timestamp": [datetime(2020, 1, 1, tzinfo=timezone.utc),
-#                           datetime(2020, 1, 2, tzinfo=timezone.utc)],
-#             "views": [100, 120],
-#             "rating": [4.75, 4.58333],
-#             "likes": [19, 22],
-#             "dislikes": [1, 2]
-#         })
-#         stats = Stats(test_data)
-#         assert_frame_equal(stats.data, test_data)
+    def test_no_input(self):
+        stats = Stats()
+        df = pd.DataFrame(dict.fromkeys(TEST_PROPERTIES, []))
+        expected = coerce_dtypes(df, **EXPECTED_TYPES)
+        assert_frame_equal(stats.data, expected)
 
-#     def test_multiple_videos_good_input(self):
-#         test_df = pd.DataFrame({
-#             "video_id": ["video_id_01", "video_id_02"],
-#             "timestamp": [datetime(2020, 1, 1, tzinfo=timezone.utc),
-#                           datetime(2020, 1, 2, tzinfo=timezone.utc)],
-#             "views": [100, 120],
-#             "rating": [4.75, 4.58333],
-#             "likes": [19, 22],
-#             "dislikes": [1, 2]
-#         })
+    def test_single_video_good_input(self):
+        test_df = pd.DataFrame(TEST_PROPERTIES)
+        expected = coerce_dtypes(test_df, **EXPECTED_TYPES)
+        stats = Stats(test_df)
+        assert_frame_equal(stats.data, expected)
 
-#     def test_duplicate_rows(self):
-#         raise NotImplementedError()
+    def test_multiple_videos_good_input(self):
+        test_df = pd.DataFrame({**TEST_PROPERTIES,
+                                "video_id": ["video_id_01", "video_id_02"]})
+        expected = coerce_dtypes(test_df, **EXPECTED_TYPES)
+        stats = Stats(test_df)
+        assert_frame_equal(stats.data, expected)
 
-#     def test_duplicate_id_and_timestamp(self):
-#         raise NotImplementedError()
+    def test_duplicate_observations(self):
+        test_df = pd.DataFrame({
+            "video_id": ["video_id_01", "video_id_01"],
+            "timestamp": [datetime(2020, 1, 1, tzinfo=timezone.utc),
+                          datetime(2020, 1, 1, tzinfo=timezone.utc)],
+            "views": [100, 100],
+            "rating": [4.75, 4/75],
+            "likes": [19, 19],
+            "dislikes": [1, 1]
+        })
+        expected = coerce_dtypes(test_df, **EXPECTED_TYPES)
+        expected = expected.drop_duplicates(subset=["video_id", "timestamp"])
+        self.assertEqual(len(expected), 1)
+        stats = Stats(test_df)
+        assert_frame_equal(stats.data, expected)
 
-#     def test_bad_dtype(self):
-#         raise NotImplementedError()
+    def test_missing_value_in_required_columns(self):
+        test_df = pd.DataFrame({
+            "video_id": ["video_id_01", None],
+            "timestamp": [None, datetime(2020, 1, 1, tzinfo=timezone.utc)],
+            "views": [100, 120],
+            "rating": [4.75, 4.58333],
+            "likes": [19, 22],
+            "dislikes": [1, 2]
+        })
+        expected = coerce_dtypes(test_df, **EXPECTED_TYPES)
+        expected = expected.dropna(subset=["video_id", "timestamp"])
+        self.assertEqual(len(expected), 0)
+        stats = Stats(test_df)
+        assert_frame_equal(stats.data, expected)
 
-#     def test_missing_column(self):
-#         raise NotImplementedError()
+    def test_bad_dataframe_type(self):
+        with self.assertRaises(TypeError) as err:
+            Stats(TEST_PROPERTIES)
+        err_msg = (f"[datatube.stats.Stats.__init__] `data` must be a "
+                   f"pandas.DataFrame (received object of type: "
+                   f"{type(TEST_PROPERTIES)})")
+        self.assertEqual(str(err.exception), err_msg)
 
-#     def test_extra_column(self):
-#         raise NotImplementedError()
+    def test_missing_column(self):
+        test_df = pd.DataFrame({k: v for k, v in TEST_PROPERTIES.items()
+                                if k != "dislikes"})
+        with self.assertRaises(ValueError) as err:
+            Stats(test_df)
+        err_msg = (f"[datatube.stats.Stats.__init__] `data` has unexpected "
+                   f"columns (missing: {{'dislikes'}})")
+        self.assertEqual(str(err.exception), err_msg)
 
-#     def test_na(self):
-#         raise NotImplementedError()
+    def test_extra_column(self):
+        test_df = pd.DataFrame({**TEST_PROPERTIES, "extra_column": [1, 2]})
+        with self.assertRaises(ValueError) as err:
+            Stats(test_df)
+        err_msg = (f"[datatube.stats.Stats.__init__] `data` has unexpected "
+                   f"columns (extra: {{'extra_column'}})")
+        self.assertEqual(str(err.exception), err_msg)
 
-#     def test_na_in_required_column(self):
-#         raise NotImplementedError()
+    def test_missing_and_extra_column(self):
+        missing = {k: v for k, v in TEST_PROPERTIES.items() if k != "dislikes"}
+        test_df = pd.DataFrame({**missing, "extra_column": [1, 2]})
+        with self.assertRaises(ValueError) as err:
+            Stats(test_df)
+        err_msg = ("[datatube.stats.Stats.__init__] `data` has unexpected "
+                   "columns (missing: {'dislikes'}, extra: "
+                   "{'extra_column'})")
+        self.assertEqual(str(err.exception), err_msg)
+
+    def test_bad_dtype(self):
+        # test every column except video_id for the each of the following:
+        test_data = {
+            int: [1, 2],
+            float: [1.1, 2.2],
+            complex: [complex(1, 1), complex(2, 2)],
+            bool: [True, False],
+            str: ["abc", "def"],
+            datetime: [datetime.now(timezone.utc), datetime.now(timezone.utc)],
+            timedelta: [timedelta(seconds=10), timedelta(seconds=20)],
+        }
+        no_video_id = [k for k in TEST_PROPERTIES if k != "video_id"]
+        for col_name in no_video_id:
+            for typespec, test_vals in test_data.items():
+                if typespec != EXPECTED_TYPES[col_name]:
+                    bad_dtype = {**TEST_PROPERTIES, col_name: test_vals}
+                    test_df = pd.DataFrame(bad_dtype)
+                    with self.assertRaises(TypeError) as err:
+                        Stats(test_df)
+                    err_msg = (f"[datatube.stats.Stats.__init__] column "
+                               f"{repr(col_name)} must contain "
+                               f"{EXPECTED_TYPES[col_name]} data (received: "
+                               f"{typespec}, head: "
+                               f"{list(test_df[col_name].head())})")
+                    self.assertEqual(str(err.exception), err_msg)
+
+    def test_bad_video_id(self):
+        bad_ids = ["video_id_01", "video_id_1"]  # not 11 characters
+        test_df = pd.DataFrame({**TEST_PROPERTIES, "video_id": bad_ids})
+        with self.assertRaises(ValueError) as err:
+            Stats(test_df)
+        err_msg = (f"[datatube.stats.Stats.__init__] bad video id: "
+                   f"{repr(bad_ids[1])}")
+        self.assertEqual(str(err.exception), err_msg)
+
+    def test_timestamp_has_no_timezone(self):
+        bad_timestamps = [datetime(2020, 1, 1, tzinfo=timezone.utc),
+                          datetime(2020, 1, 2)]  # no tzinfo
+        test_df = pd.DataFrame({**TEST_PROPERTIES, "timestamp": bad_timestamps})
+        with self.assertRaises(ValueError) as err:
+            Stats(test_df)
+        err_msg = (f"[datatube.stats.Stats.__init__] timestamp has no "
+                   f"timezone: {repr(bad_timestamps[1])}")
+        self.assertEqual(str(err.exception), err_msg)
+
+    def test_timestamp_in_future(self):
+        raise NotImplementedError()
+
+    # def test_na(self):
+    #     raise NotImplementedError()
 
 
 

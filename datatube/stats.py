@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import warnings
 
@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pandas.api.types as pdtypes
 
+from datatube import is_video_id
 from datatube.check import is_video_id
 from datatube.error import error_trace
 
@@ -48,13 +49,11 @@ def check_dtypes(data: pd.DataFrame, **kwargs) -> bool:
             column = data[col_name].convert_dtypes()
         except TypeError:
             column = data[col_name]
-        
         # single typespec
         if not isinstance(typespec, (tuple, list, set)):
             if typespec == str and dtype_lookup[object](column):
                 return False  # column is better described as object
             return dtype_lookup[typespec](column)
-
         # multiple typespecs
         results = []
         for ts in typespec:
@@ -68,21 +67,6 @@ def check_dtypes(data: pd.DataFrame, **kwargs) -> bool:
                for col_name, typespec in kwargs.items())
 
 
-    # kwargs
-    for col_name, typespec in kwargs.items():
-        try:
-            # conversion differentiates between int and float w/ NA
-            column = data[col_name].convert_dtypes()
-        except TypeError:
-            column = data[col_name]
-        # differentiate between str and object
-        if typespec == str and dtype_lookup[object](column):
-            return False
-        if not dtype_lookup[typespec](column):
-            return False
-    return True
-
-
 def coerce_dtypes(data: pd.DataFrame, **kwargs) -> pd.DataFrame:
     dtype_lookup = {
         object: np.dtype("O"),
@@ -93,8 +77,10 @@ def coerce_dtypes(data: pd.DataFrame, **kwargs) -> pd.DataFrame:
         str: pd.StringDtype(),  # numpy: np.dtype("O")
         bool: pd.BooleanDtype(),  # numpy: np.dtype("bool")
         datetime: np.dtype("datetime64[ns]"),
+        # datetime: pd.DatetimeTZDtype(),
         timedelta: np.dtype("timedelta64[ns]")
     }
+    # pd.to_datetime(..., utc=True)
 
     # kwargless
     if len(kwargs) == 0:
@@ -125,68 +111,139 @@ class Stats:
 
     def __init__(self,
                  data: pd.DataFrame | None = None,
-                 interpolate: bool = False,
-                 immutable: bool = False):
-        expected_columns = {
-            "video_id": (str, False),
-            "timestamp": (datetime, False),
-            "views": (int, True),
-            "rating": ("numeric", True),
-            "likes": (int, True),
-            "dislikes": (int, True)
-        }  # col_name: (typespec, na_allowed)
-        expected_types = {k: v[0] for k, v in expected_columns.items()}
-        typename_conv = {
-            int: "integer",
-            float: "float",
-            "numeric": "numeric",
-            str: "string",
-            bool: "boolean",
-            datetime: "datetime",
-            timedelta: "timedelta"
+                 interpolate: bool = False):
+        expected_columns = {  # col_name: typespec
+            "video_id": str,
+            "timestamp": datetime,
+            "views": int,
+            "rating": float,
+            "likes": int,
+            "dislikes": int
         }
 
-        if data is not None:
-            # check data is dataframe
+        # naked init
+        if data is None:
+            df = pd.DataFrame(dict.fromkeys(expected_columns, []))
+            self._data = coerce_dtypes(df, **expected_columns)
+
+        else:
+
+            # check type
             if not isinstance(data, pd.DataFrame):
                 err_msg = (f"[{error_trace()}] `data` must be a "
-                           f"pandas.DataFrame object (received object of "
-                           f"type: {type(data)})")
+                           f"pandas.DataFrame (received object of type: "
+                           f"{type(data)})")
                 raise TypeError(err_msg)
 
             # check column names match expected
-            if set(data.columns) != set(expected_columns):  # column mismatch
+            if set(data.columns) != set(expected_columns):
                 missing_columns = set(expected_columns) - set(data.columns)
                 extra_columns = set(data.columns) - set(expected_columns)
-                err_msg = (f"[{error_trace()}] columns of `data` do not "
-                           f"match expected")
-                if len(missing_columns) > 0 and len(extra_columns) > 0 :
-                    context = (f"(missing columns: {repr(missing_columns)}, "
-                               f"extra columns: {repr(extra_columns)})")
-                elif len(missing_columns) > 0:
-                    context = (f"(missing columns: {repr(missing_columns)})")
+                err_msg = f"[{error_trace()}] `data` has unexpected columns"
+                if missing_columns and extra_columns:
+                    context = (f"(missing: {repr(missing_columns)}, extra: "
+                               f"{repr(extra_columns)})")
+                elif missing_columns:
+                    context = f"(missing: {repr(missing_columns)})"
                 else:
-                    context = (f"(extra columns: {repr(extra_columns)})")
+                    context = f"(extra: {repr(extra_columns)})"
                 raise ValueError(f"{err_msg} {context}")
 
-            # check column types and missing values match expected
-            for col_name, (typespec, na_allowed) in expected_columns.items():
+            # check column dtypes
+            for col_name, typespec in expected_columns.items():
                 if not check_dtypes(data, **{col_name: typespec}):
                     err_msg = (f"[{error_trace()}] column {repr(col_name)} "
-                               f"must contain {typename_conv[typespec]} data")
+                            f"must contain {typespec} data (received: "
+                            f"{check_dtypes(data)[col_name]}, head: "
+                            f"{list(data[col_name].head())})")
                     raise TypeError(err_msg)
-                if not na_allowed and data[col_name].hasnans:
-                    err_msg = (f"[{error_trace()}] column {repr(col_name)} "
-                               f"cannot contain missing values")
+
+            # format data and drop duplicates/NAs in required columns
+            data = coerce_dtypes(data, **expected_columns)
+            data = data[list(expected_columns)]  # reorder columns
+            data = data.dropna(subset=["video_id", "timestamp"])
+            data = data.drop_duplicates(subset=["video_id", "timestamp"])
+
+            # check video_id and timestamp are as expected
+            def check_video_id(video_id):
+                if not is_video_id(video_id):
+                    err_msg = (f"[{error_trace(stack_index=5)}] bad video id: "
+                               f"{repr(video_id)}")
                     raise ValueError(err_msg)
 
-            # coerce dtypes and sort into expected order
-            data = coerce_dtypes(data, **expected_types)
-            self._data = data[list(expected_columns)]
+            def check_timestamp(timestamp):
+                if timestamp.tzinfo is None:
+                    err_msg = (f"[{error_trace(stack_index=5)}] timestamp has "
+                               f"no timezone: {repr(timestamp)}")
+                    raise ValueError(err_msg)
+                current_time = datetime.now(timezone.utc)
+                if timestamp > current_time:
+                    err_msg = (f"[{error_trace(stack_index=5)}] timestamp is "
+                               f"in the future: {timestamp} > {current_time}")
 
-        else:  # create new df and set expected dtypes
-            data = pd.DataFrame(dict.fromkeys(list(expected_columns), []))
-            self._data = coerce_dtypes(data, **expected_types)
+            data["video_id"].apply(check_video_id)
+            data["timestamp"].apply(check_timestamp)
+
+            # interpolate missing values and save data
+            if not interpolate:
+                self._data = data
+            else:
+                # set timestamp as index and do time-based interpolation
+                raise NotImplementedError()
+
+
+        # expected_types = {k: v[0] for k, v in expected_columns.items()}
+        # typename_conv = {
+        #     int: "integer",
+        #     float: "float",
+        #     "numeric": "numeric",
+        #     str: "string",
+        #     bool: "boolean",
+        #     datetime: "datetime",
+        #     timedelta: "timedelta"
+        # }
+
+        # if data is not None:
+        #     # check data is dataframe
+        #     if not isinstance(data, pd.DataFrame):
+        #         err_msg = (f"[{error_trace()}] `data` must be a "
+        #                    f"pandas.DataFrame object (received object of "
+        #                    f"type: {type(data)})")
+        #         raise TypeError(err_msg)
+
+        #     # check column names match expected
+        #     if set(data.columns) != set(expected_columns):  # column mismatch
+        #         missing_columns = set(expected_columns) - set(data.columns)
+        #         extra_columns = set(data.columns) - set(expected_columns)
+        #         err_msg = (f"[{error_trace()}] columns of `data` do not "
+        #                    f"match expected")
+        #         if len(missing_columns) > 0 and len(extra_columns) > 0 :
+        #             context = (f"(missing columns: {repr(missing_columns)}, "
+        #                        f"extra columns: {repr(extra_columns)})")
+        #         elif len(missing_columns) > 0:
+        #             context = (f"(missing columns: {repr(missing_columns)})")
+        #         else:
+        #             context = (f"(extra columns: {repr(extra_columns)})")
+        #         raise ValueError(f"{err_msg} {context}")
+
+        #     # check column types and missing values match expected
+        #     for col_name, (typespec, na_allowed) in expected_columns.items():
+        #         if not check_dtypes(data, **{col_name: typespec}):
+        #             err_msg = (f"[{error_trace()}] column {repr(col_name)} "
+        #                        f"must contain {typename_conv[typespec]} data")
+        #             raise TypeError(err_msg)
+        #         if not na_allowed and data[col_name].hasnans:
+        #             err_msg = (f"[{error_trace()}] column {repr(col_name)} "
+        #                        f"cannot contain missing values")
+        #             raise ValueError(err_msg)
+
+        #     # coerce dtypes and sort into expected order
+        #     data = coerce_dtypes(data, **expected_types)
+        #     self._data = data[list(expected_columns)]
+
+        # else:  # create new df and set expected dtypes
+        #     data = pd.DataFrame(dict.fromkeys(list(expected_columns), []))
+        #     self._data = coerce_dtypes(data, **expected_types)
 
     @classmethod
     def from_csv(cls, csv_path: Path) -> Stats:
