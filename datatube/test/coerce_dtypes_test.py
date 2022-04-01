@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import random
 import unittest
 
@@ -9,168 +8,27 @@ from pandas.testing import assert_frame_equal, assert_series_equal
 import pytz
 
 if __name__ == "__main__":
+    from pathlib import Path
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from datatube.dtype import _check_column, check_dtypes, coerce_dtypes
+from datatube.dtype import coerce_dtypes
 
 
-SIZE = 3
-TEST_COLUMN_NAME = "test_col"
 unittest.TestCase.maxDiff = None
 
 
-class TestObj:
-    pass
+class CoerceDtypeBasicTests(unittest.TestCase):
 
+    def test_coerce_dtypes_returns_copy(self):
+        # series
+        in_series = pd.Series([1, 2, 3])
+        out_series = coerce_dtypes(in_series, float)
+        self.assertNotEqual(id(in_series), id(out_series))
 
-class CheckDtypesTests(unittest.TestCase):
-
-    test_data = {
-        int: {
-            "integers": [-1 * SIZE // 2 + i + 1 for i in range(SIZE)],
-            "whole_floats": [float(i + 1) for i in range(SIZE)],
-            "int_bool_flags": [(i + 1) % 2 for i in range(SIZE)]
-        },
-        float: {
-            "decimal_floats": [i + 0.5 for i in range(SIZE)]
-        },
-        complex: {
-            "real_whole_complex": [complex(i + 1, 0) for i in range(SIZE)],
-            "real_decimal_complex": [complex(i + 0.5, 0) for i in range(SIZE)],
-            "imaginary_complex": [complex(i + 1, i + 1) for i in range(SIZE)]
-        },
-        str: {
-            "character_strings": [chr(i % 26 + ord("a")) for i in range(SIZE)],
-            "integer_strings": [str(i + 1) for i in range(SIZE)],
-            "int_bool_flag_strings": [str((i + 1) % 2) for i in range(SIZE)],
-            "whole_float_strings": [str(i + 1.0) for i in range(SIZE)],
-            "decimal_strings": [str(i + 1.5) for i in range(SIZE)],
-            "real_whole_complex_strings":
-                [str(complex(i + 1, 0)) for i in range(SIZE)],
-            "real_decimal_complex_strings":
-                [str(complex(i + 1.5, 0)) for i in range(SIZE)],
-            "imaginary_complex_strings":
-                [str(complex(i + 1, i + 1)) for i in range(SIZE)],
-            "boolean_strings": [str(bool((i + 1) % 2)) for i in range(SIZE)],
-            "naive_ISO_8601_strings":
-                [datetime.fromtimestamp(i).isoformat() for i in range(SIZE)],
-            "aware_ISO_8601_strings":
-                [datetime.fromtimestamp(i, tz=timezone.utc).isoformat()
-                 for i in range(SIZE)]
-        },
-        bool: {
-            "bools": [bool((i + 1) % 2) for i in range(SIZE)]
-        },
-        datetime: {
-            "naive_datetimes": [datetime.fromtimestamp(i) for i in range(SIZE)],
-            "aware_datetimes":
-                [datetime.fromtimestamp(i, tz=timezone.utc)
-                 for i in range(SIZE)],
-            "mixed_datetimes_aware_naive":
-                [datetime.fromtimestamp(i, tz=timezone.utc) if i % 2
-                 else datetime.fromtimestamp(i) for i in range(SIZE)],
-            "mixed_datetime_timezones":
-                [datetime.fromtimestamp(
-                    i,
-                    tz=pytz.timezone(
-                        pytz.all_timezones[i % len(pytz.all_timezones)]
-                    )
-                ) for i in range(SIZE)]
-        },
-        timedelta: {
-            "timedeltas": [timedelta(seconds=i + 1) for i in range(SIZE)]
-        },
-        object: {
-            "missing_values": [None for _ in range(SIZE)],
-            "custom_objects": [TestObj() for _ in range(SIZE)]
-        }
-    }
-    all_data = {k: v for tests in test_data.values() for k, v in tests.items()}
-
-    def test_check_column_helper_no_na(self):
-        test_df = pd.DataFrame(self.all_data)
-        failed = []
-        for typespec in self.test_data:
-            for col_name in test_df.columns:
-                column = test_df[col_name]
-                result = _check_column(column, typespec)
-                expected = col_name in self.test_data[typespec]
-                try:
-                    self.assertEqual(result, expected)
-                except AssertionError:
-                    context = (f"_check_column(test_df[{repr(col_name)}], "
-                               f"{typespec.__name__}) != {expected}")
-                    failed.append(context)
-        if len(failed) > 0:
-            joined = "\n\t".join(failed)
-            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
-
-    def test_check_column_helper_with_na(self):
-        with_na = {k: [*v, None] for k, v in self.all_data.items()}
-        test_df = pd.DataFrame(with_na)
-        failed = []
-        for typespec in self.test_data:
-            for col_name in test_df.columns:
-                column = test_df[col_name]
-                result = _check_column(column, typespec)
-                expected = col_name in self.test_data[typespec]
-                try:
-                    self.assertEqual(result, expected)
-                except AssertionError:
-                    context = (f"_check_column(test_df[{repr(col_name)}], "
-                               f"{typespec.__name__}) != {expected}")
-                    failed.append(context)
-        if len(failed) > 0:
-            joined = "\n\t".join(failed)
-            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
-
-    def test_check_dtypes_kwargless_no_na(self):
-        test_df = pd.DataFrame(self.all_data)
-        expected = {name: typespec for typespec, v in self.test_data.items()
-                    for name in v}
-        self.assertEqual(check_dtypes(test_df), expected)
-
-    def test_check_dtypes_kwargless_with_na(self):
-        with_na = {k: [*v, None] for k, v in self.all_data.items()}
-        test_df = pd.DataFrame(with_na)
-        expected = {name: typespec for typespec, v in self.test_data.items()
-                    for name in v}
-        self.assertEqual(check_dtypes(test_df), expected)
-
-    def test_check_dtypes_kwargs_no_na(self):
-        test_df = pd.DataFrame(self.all_data)
-        failed = []
-        for typespec in self.test_data:
-            for col_name in test_df.columns:
-                result = check_dtypes(test_df, **{col_name: typespec})
-                expected = col_name in self.test_data[typespec]
-                try:
-                    self.assertEqual(result, expected)
-                except AssertionError:
-                    context = (f"check_dtypes(test_df, "
-                               f"{col_name}={typespec.__name__}) != {expected}")
-                    failed.append(context)
-        if len(failed) > 0:
-            joined = "\n\t".join(failed)
-            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
-
-    def test_check_dtypes_kwargs_with_na(self):
-        with_na = {k: [*v, None] for k, v in self.all_data.items()}
-        test_df = pd.DataFrame(with_na)
-        failed = []
-        for typespec in self.test_data:
-            for col_name in test_df.columns:
-                result = check_dtypes(test_df, **{col_name: typespec})
-                expected = col_name in self.test_data[typespec]
-                try:
-                    self.assertEqual(result, expected)
-                except AssertionError:
-                    context = (f"check_dtypes(test_df, "
-                               f"{col_name}={typespec.__name__}) != {expected}")
-                    failed.append(context)
-        if len(failed) > 0:
-            joined = "\n\t".join(failed)
-            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
+        # dataframe
+        in_df = pd.DataFrame({"copy": [1, 2, 3]})
+        out_df = coerce_dtypes(in_df, {"copy": float})
+        self.assertNotEqual(id(in_df), id(out_df))
 
 
 class CoerceIntegerDtypeTests(unittest.TestCase):
@@ -2797,7 +2655,7 @@ class CoerceTimedeltaDtypeTests(unittest.TestCase):
 
     def test_coerce_from_timedelta_to_string_no_na(self):
         in_data = self.timedeltas
-        out_data = [str(t) for t in self.timedeltas]
+        out_data = [str(pd.Timedelta(t)) for t in self.timedeltas]
 
         # series
         in_series = pd.Series(in_data)
@@ -2813,7 +2671,7 @@ class CoerceTimedeltaDtypeTests(unittest.TestCase):
 
     def test_coerce_from_timedelta_to_string_with_na(self):
         in_data = self.timedeltas + [None]
-        out_data = [str(t) for t in self.timedeltas] + [None]
+        out_data = [str(pd.Timedelta(t)) for t in self.timedeltas] + [None]
 
         # series
         in_series = pd.Series(in_data)
@@ -2829,7 +2687,7 @@ class CoerceTimedeltaDtypeTests(unittest.TestCase):
 
     def test_coerce_from_timedelta_bool_flag_to_boolean_no_na(self):
         in_data = self.bool_flags
-        out_data = [bool(d.timestamp()) for d in self.bool_flags]
+        out_data = [bool(d.total_seconds()) for d in self.bool_flags]
 
         # series
         in_series = pd.Series(in_data)
@@ -2845,7 +2703,7 @@ class CoerceTimedeltaDtypeTests(unittest.TestCase):
 
     def test_coerce_from_timedelta_bool_flag_to_boolean_with_na(self):
         in_data = self.bool_flags + [None]
-        out_data = [bool(d.timestamp()) for d in self.bool_flags] + [None]
+        out_data = [bool(d.total_seconds()) for d in self.bool_flags] + [None]
 
         # series
         in_series = pd.Series(in_data)
@@ -3106,38 +2964,6 @@ class CoerceObjectDtypeTests(unittest.TestCase):
     def test_coerce_from_object_to_object(self):
         pass
         # raise NotImplementedError()
-
-
-
-
-
-class CoerceDtypesTests(unittest.TestCase):
-
-    example_data = {
-        "integers": [-1 * SIZE // 2 + i + 1 for i in range(SIZE)],
-        "decimal floats": [-1 * SIZE // 2 + i + 1.5 for i in range(SIZE)],
-        "decimal floats (0, 1)": [random.random() for _ in range(SIZE)],
-        "booleans": [bool((i + 1) % 2) for i in range(SIZE)],
-        "character strings": [chr(i % 26 + ord("a")) for i in range(SIZE)],
-        "random datetimes":
-            [datetime.fromtimestamp(i + random.random(), tz=timezone.utc)
-             for i in range(SIZE)],
-        "random naive datetimes":
-            [datetime.utcfromtimestamp(i) for i in range(SIZE)],
-        "random timedeltas":
-            [timedelta(seconds=i + random.random()) for i in range(SIZE)]
-    }
-
-    def test_coerce_dtypes_returns_copy(self):
-        # Series
-        column = pd.Series(self.example_data["integers"])
-        result = coerce_dtypes(column, float)
-        self.assertNotEqual(id(column), id(result))
-
-        # DataFrame
-        df = pd.DataFrame({TEST_COLUMN_NAME: self.example_data["integers"]})
-        result = coerce_dtypes(df, {TEST_COLUMN_NAME: float})
-        self.assertNotEqual(id(df), id(result))
 
 
 

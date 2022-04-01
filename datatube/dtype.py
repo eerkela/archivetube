@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 import warnings
 
 import numpy as np
@@ -253,7 +254,7 @@ def check_dtypes(
                     result.append(col_name)
             return result
         if isinstance(typespec, dict):
-            return all(_coerce_column(data[col_name], ts)
+            return all(_check_column(data[col_name], ts)
                        for col_name, ts in typespec.items())
         err_msg = (f"[{error_trace()}] when used on a dataframe, `typespec` "
                    f"must be an atomic data type, a map of column names and "
@@ -267,8 +268,14 @@ def check_dtypes(
     raise TypeError(err_msg)
 
 
-def coerce_dtypes(data: pd.Series | pd.DataFrame,
-                  typespec: type | dict[str, type]) -> pd.Series | pd.DataFrame:
+def coerce_dtypes(
+    data: pd.Series | pd.DataFrame,
+    typespec: type | dict[str, type],
+    downcast: bool = True,
+    signed: bool = True,
+    datetime_format: str | list[str] | tuple[str] | set[str] | None = None,
+    object_method: Callable | None = None
+) -> pd.Series | pd.DataFrame:
     if isinstance(data, pd.Series):
         if isinstance(typespec, type):
             try:
@@ -310,3 +317,4 @@ def coerce_dtypes(data: pd.Series | pd.DataFrame,
 
 def convert_dtypes(data: pd.DataFrame) -> pd.DataFrame:
     return coerce_dtypes(data, **check_dtypes(data))
+
