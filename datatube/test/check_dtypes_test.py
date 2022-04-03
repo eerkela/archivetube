@@ -13,324 +13,140 @@ if __name__ == "__main__":
 from datatube.dtype import check_dtypes
 
 
+class TestObj:
+    pass
+
+
 unittest.TestCase.maxDiff = None
+SIZE = 3
+TEST_DATA = {
+    int: {
+        "integers":
+            [-1 * SIZE // 2 + i + 1 for i in range(SIZE)],
+        "whole floats":
+            [-1 * SIZE // 2 + i + 1.0 for i in range(SIZE)],
+        "real whole complex":
+            [complex(-1 * SIZE // 2 + i + 1, 0) for i in range(SIZE)],
+    },
+    float: {
+        "decimal floats":
+            [-1 * SIZE // 2 + i + 1 + random.random() for i in range(SIZE)],
+        "real decimal complex":
+            [complex(-1 * SIZE // 2 + i + 1 + random.random(), 0)
+             for i in range(SIZE)],
+    },
+    complex: {
+        "imaginary complex":
+            [complex(-1 * SIZE // 2 + i + 1 + random.random(),
+                     -1 * SIZE // 2 + i + 1 + random.random())
+             for i in range(SIZE)],
+    },
+    str: {
+        "integer strings":
+            [str(-1 * SIZE // 2 + i + 1) for i in range(SIZE)],
+        "whole float strings":
+            [str(-1 * SIZE // 2 + i + 1.0) for i in range(SIZE)],
+        "decimal float strings":
+            [str(-1 * SIZE // 2 + i + 1 + random.random())
+             for i in range(SIZE)],
+        "real whole complex strings":
+            [str(complex(-1 * SIZE // 2 + i + 1, 0)) for i in range(SIZE)],
+        "real decimal complex strings":
+            [str(complex(-1 * SIZE // 2 + i + 1 + random.random(), 0))
+             for i in range(SIZE)],
+        "imaginary complex strings":
+            [str(complex(-1 * SIZE // 2 + i + 1 + random.random(),
+                         -1 * SIZE // 2 + i + 1 + random.random()))
+             for i in range(SIZE)],
+        "character strings":
+            [chr(i % 26 + ord("a")) for i in range(SIZE)],
+        "boolean strings":
+            [str(bool((i + 1) % 2)) for i in range(SIZE)],
+        "aware datetime strings":
+            [str(datetime.fromtimestamp(i, tz=timezone.utc))
+             for i in range(SIZE)],
+        "aware ISO 8601 strings":
+            [datetime.fromtimestamp(i, tz=timezone.utc).isoformat()
+             for i in range(SIZE)],
+        "naive datetime strings":
+            [str(datetime.fromtimestamp(i)) for i in range(SIZE)],
+        "naive ISO 8601 strings":
+            [datetime.fromtimestamp(i).isoformat() for i in range(SIZE)],
+        "aware/naive datetime strings":
+            [str(datetime.fromtimestamp(i, tz=timezone.utc)) if i % 2
+             else str(datetime.fromtimestamp(i)) for i in range(SIZE)],
+        "aware/naive ISO 8601 strings":
+            [datetime.fromtimestamp(i, tz=timezone.utc).isoformat() if i % 2
+             else datetime.fromtimestamp(i).isoformat()
+             for i in range(SIZE)],
+        "mixed timezone datetime strings":
+            [str(
+                datetime.fromtimestamp(
+                    i,
+                    tz=pytz.timezone(
+                        pytz.all_timezones[i % len(pytz.all_timezones)]
+                    )
+                )
+             ) for i in range(SIZE)],
+        "mixed timezone ISO 8601 strings":
+            [datetime.fromtimestamp(
+                i,
+                tz=pytz.timezone(
+                    pytz.all_timezones[i % len(pytz.all_timezones)]
+                )
+             ).isoformat() for i in range(SIZE)],
+        "timedelta strings":
+            [str(timedelta(seconds=i + 1)) for i in range(SIZE)],
+        "pd.Timedelta strings":
+            [str(pd.Timedelta(timedelta(seconds=i + 1))) for i in range(SIZE)]
+    },
+    bool: {
+       "booleans":
+            [bool((i + 1) % 2) for i in range(SIZE)] 
+    },
+    datetime: {
+        "aware datetimes":
+            [datetime.fromtimestamp(i, tz=timezone.utc) for i in range(SIZE)],
+        "naive datetimes":
+            [datetime.fromtimestamp(i) for i in range(SIZE)],
+        "aware/naive datetimes":
+            [datetime.fromtimestamp(i, tz=timezone.utc) if i % 2
+             else datetime.fromtimestamp(i) for i in range(SIZE)],
+        "mixed timezone datetimes":
+            [datetime.fromtimestamp(
+                i,
+                tz = pytz.timezone(
+                    pytz.all_timezones[i % len(pytz.all_timezones)]
+                )
+             ) for i in range(SIZE)]
+    },
+    timedelta: {
+        "timedeltas":
+            [timedelta(seconds=i + 1) for i in range(SIZE)]
+    },
+    object: {
+        "Nones":
+            [None for _ in range(SIZE)],
+        "custom objects":
+            [TestObj() for _ in range(SIZE)]
+    }
+}
+ALL_DATA = {col_name: data for v in TEST_DATA.values()
+            for col_name, data in v.items()}
 
 
 class CheckDtypeTests(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        class TestObj:
-            pass
-        
-        random.seed(12345)
-        size = 3
-        cls.integers = {
-            "integers":
-                [-1 * size // 2 + i + 1 for i in range(size)],
-            "integer strings":
-                [str(-1 * size // 2 + i + 1) for i in range(size)],
-            "whole floats":
-                [-1 * size // 2 + i + 1.0 for i in range(size)],
-            "whole float strings":
-                [str(-1 * size // 2 + i + 1.0) for i in range(size)],
-            "real whole complex":
-                [complex(-1 * size // 2 + i + 1, 0) for i in range(size)],
-            "real whole complex strings":
-                [str(complex(-1 * size // 2 + i + 1, 0)) for i in range(size)],
-        }
-        cls.floats = {
-            "whole floats":
-                [-1 * size // 2 + i + 1.0 for i in range(size)],
-            "whole float strings":
-                [str(-1 * size // 2 + i + 1.0) for i in range(size)],
-            "decimal floats":
-                [-1 * size // 2 + i + 1 + random.random() for i in range(size)],
-            "decimal float strings":
-                [str(-1 * size // 2 + i + 1 + random.random())
-                 for i in range(size)],
-            "real decimal complex":
-                [complex(-1 * size // 2 + i + 1 + random.random(), 0)
-                 for i in range(size)],
-            "real decimal complex strings":
-                [str(complex(-1 * size // 2 + i + 1 + random.random(), 0))
-                 for i in range(size)]
-        }
-        cls.complex = {
-            "real whole complex":
-                [complex(-1 * size // 2 + i + 1, 0) for i in range(size)],
-            "real whole complex strings":
-                [str(complex(-1 * size // 2 + i + 1, 0)) for i in range(size)],
-            "real decimal complex":
-                [complex(-1 * size // 2 + i + 1 + random.random(), 0)
-                 for i in range(size)],
-            "real decimal complex strings":
-                [str(complex(-1 * size // 2 + i + 1 + random.random(), 0))
-                 for i in range(size)],
-            "imaginary complex":
-                [complex(-1 * size // 2 + i + 1 + random.random(),
-                         -1 * size // 2 + i + 1 + random.random())
-                 for i in range(size)],
-            "imaginary complex strings":
-                [str(complex(-1 * size // 2 + i + 1 + random.random(),
-                             -1 * size // 2 + i + 1 + random.random()))
-                 for i in range(size)]
-        }
-        cls.strings = {
-            "integer strings":
-                [str(-1 * size // 2 + i + 1) for i in range(size)],
-            "whole float strings":
-                [str(-1 * size // 2 + i + 1.0) for i in range(size)],
-            "decimal float strings":
-                [str(-1 * size // 2 + i + 1 + random.random())
-                 for i in range(size)],
-            "real whole complex strings":
-                [str(complex(-1 * size // 2 + i + 1, 0)) for i in range(size)],
-            "real decimal complex strings":
-                [str(complex(-1 * size // 2 + i + 1 + random.random(), 0))
-                 for i in range(size)],
-            "imaginary complex strings":
-                [str(complex(-1 * size // 2 + i + 1 + random.random(),
-                             -1 * size // 2 + i + 1 + random.random()))
-                 for i in range(size)],
-            "character strings":
-                [chr(i % 26 + ord("a")) for i in range(size)],
-            "boolean strings":
-                [str(bool((i + 1) % 2)) for i in range(size)],
-            "aware datetime strings":
-                [str(datetime.fromtimestamp(i, tz=timezone.utc))
-                 for i in range(size)],
-            "aware ISO 8601 strings":
-                [datetime.fromtimestamp(i, tz=timezone.utc).isoformat()
-                 for i in range(size)],
-            "naive datetime strings":
-                [str(datetime.fromtimestamp(i)) for i in range(size)],
-            "naive ISO 8601 strings":
-                [datetime.fromtimestamp(i).isoformat() for i in range(size)],
-            "aware/naive datetime strings":
-                [str(datetime.fromtimestamp(i, tz=timezone.utc)) if i % 2
-                 else str(datetime.fromtimestamp(i)) for i in range(size)],
-            "aware/naive ISO 8601 strings":
-                [datetime.fromtimestamp(i, tz=timezone.utc).isoformat() if i % 2
-                 else datetime.fromtimestamp(i).isoformat()
-                 for i in range(size)],
-            "mixed timezone datetime strings":
-                [str(
-                    datetime.fromtimestamp(
-                        i,
-                        tz=pytz.timezone(
-                            pytz.all_timezones[i % len(pytz.all_timezones)]
-                        )
-                    )
-                 ) for i in range(size)],
-            "mixed timezone ISO 8601 strings":
-                [datetime.fromtimestamp(
-                    i,
-                    tz=pytz.timezone(
-                        pytz.all_timezones[i % len(pytz.all_timezones)]
-                    )
-                ).isoformat() for i in range(size)],
-            "timedelta strings":
-                [str(timedelta(seconds=i + 1)) for i in range(size)],
-            "pd.Timedelta strings":
-                [str(pd.Timedelta(timedelta(seconds=i + 1)))
-                 for i in range(size)]
-        }
-        cls.booleans = {
-            "booleans":
-                [bool((i + 1) % 2) for i in range(size)],
-            "boolean strings":
-                [str(bool((i + 1) % 2)) for i in range(size)],
-            "integer bool flags":
-                [(i + 1) % 2 for i in range(size)],
-            "integer bool flag strings":
-                [str((i + 1) % 2) for i in range(size)],
-            "float bool flags":
-                [(i + 1.0) % 2 for i in range(size)],
-            "float bool flag strings":
-                [str((i + 1) % 2) for i in range(size)],
-            "complex bool flags":
-                [complex((i + 1) % 2) for i in range(size)],
-            "complex bool flag strings":
-                [str(complex((i + 1) % 2)) for i in range(size)]
-        }
-        cls.datetimes = {
-            "aware datetimes":
-                [datetime.fromtimestamp(i, tz=timezone.utc)
-                 for i in range(size)],
-            "aware datetime strings":
-                [str(datetime.fromtimestamp(i, tz=timezone.utc))
-                 for i in range(size)],
-            "aware ISO 8601 strings":
-                [datetime.fromtimestamp(i, tz=timezone.utc).isoformat()
-                 for i in range(size)],
-            "naive datetimes":
-                [datetime.fromtimestamp(i) for i in range(size)],
-            "naive datetime strings":
-                [str(datetime.fromtimestamp(i)) for i in range(size)],
-            "naive ISO 8601 strings":
-                [datetime.fromtimestamp(i).isoformat() for i in range(size)],
-            "aware/naive datetimes":
-                [datetime.fromtimestamp(i, tz=timezone.utc) if i % 2
-                 else datetime.fromtimestamp(i) for i in range(size)],
-            "aware/naive datetime strings":
-                [str(datetime.fromtimestamp(i, tz=timezone.utc)) if i % 2
-                 else str(datetime.fromtimestamp(i)) for i in range(size)],
-            "aware/naive ISO 8601 strings":
-                [datetime.fromtimestamp(i, tz=timezone.utc).isoformat() if i % 2
-                 else datetime.fromtimestamp(i).isoformat()
-                 for i in range(size)],
-            "mixed timezone datetimes":
-                [datetime.fromtimestamp(
-                    i,
-                    tz = pytz.timezone(
-                        pytz.all_timezones[i % len(pytz.all_timezones)]
-                    )
-                ) for i in range(size)],
-            "mixed timezone datetime strings":
-                [str(
-                    datetime.fromtimestamp(
-                        i,
-                        tz=pytz.timezone(
-                            pytz.all_timezones[i % len(pytz.all_timezones)]
-                        )
-                    )
-                 ) for i in range(size)],
-            "mixed timezone ISO 8601 strings":
-                [datetime.fromtimestamp(
-                    i,
-                    tz=pytz.timezone(
-                        pytz.all_timezones[i % len(pytz.all_timezones)]
-                    )
-                ).isoformat() for i in range(size)],
-        }
-        cls.timedeltas = {
-            "timedeltas":
-                [timedelta(seconds=i + 1) for i in range(size)],
-            "timedelta strings":
-                [str(timedelta(seconds=i + 1)) for i in range(size)],
-            "pd.Timedelta strings":
-                [str(pd.Timedelta(timedelta(seconds=i + 1)))
-                 for i in range(size)]
-        }
-        cls.objects = {
-            "Nones":
-                [None for _ in range(size)],
-            "custom objects":
-                [TestObj() for _ in range(size)]
-        }
-        cls.all_data = {**cls.integers, **cls.floats, **cls.complex,
-                        **cls.strings, **cls.booleans, **cls.datetimes,
-                        **cls.timedeltas, **cls.objects}
-
-    def test_check_dtypes_series_no_typespec_no_na(self):
-        type_lookup = {
-            int: self.integers,
-            float: self.floats,
-            complex: self.complex,
-            str: self.strings,
-            bool: self.booleans,
-            datetime: self.booleans,
-            timedelta: self.timedeltas,
-            object: self.objects
-        }
-        failed = []
-        for col_name, data in self.all_data.items():
-            series = pd.Series(data)
-            result = check_dtypes(series)
-            lookup = [typespec for typespec, subset in type_lookup.items()
-                      if col_name in subset]
-            expected = tuple(lookup)
-            try:
-                self.assertEqual(result, expected)
-            except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}]) != "
-                           f"{expected}")
-                failed.append(context)
-        if len(failed) > 0:
-            joined = "\n\t".join(failed)
-            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
-
-    def test_check_dtypes_series_no_typespec_with_na(self):
-        type_lookup = {
-            int: self.integers,
-            float: self.floats,
-            complex: self.complex,
-            str: self.strings,
-            bool: self.booleans,
-            datetime: self.booleans,
-            timedelta: self.timedeltas,
-            object: self.objects
-        }
-        failed = []
-        for col_name, data in self.all_data.items():
-            series = pd.Series(data + [None])
-            result = check_dtypes(series)
-            lookup = [typespec for typespec, subset in type_lookup.items()
-                      if col_name in subset]
-            expected = tuple(lookup)
-            try:
-                self.assertEqual(result, expected)
-            except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}]) != "
-                           f"{expected}")
-                failed.append(context)
-        if len(failed) > 0:
-            joined = "\n\t".join(failed)
-            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
-
-    def test_check_dtypes_df_no_typespec_no_na(self):
-        type_lookup = {
-            int: self.integers,
-            float: self.floats,
-            complex: self.complex,
-            str: self.strings,
-            bool: self.booleans,
-            datetime: self.booleans,
-            timedelta: self.timedeltas,
-            object: self.objects
-        }
-        df = pd.DataFrame(self.all_data)
-        result = check_dtypes(df)
-        expected = {}
-        for col_name in df.columns:
-            lookup = [typespec for typespec, subset in type_lookup.items()
-                      if col_name in subset]
-            expected[col_name] = tuple(lookup)
-        self.assertEqual(result, expected)
-
-    def test_check_dtypes_df_no_typespec_with_na(self):
-        type_lookup = {
-            int: self.integers,
-            float: self.floats,
-            complex: self.complex,
-            str: self.strings,
-            bool: self.booleans,
-            datetime: self.booleans,
-            timedelta: self.timedeltas,
-            object: self.objects
-        }
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
-        df = pd.DataFrame(with_na)
-        result = check_dtypes(df)
-        expected = {}
-        for col_name in df.columns:
-            lookup = [typespec for typespec, subset in type_lookup.items()
-                      if col_name in subset]
-            expected[col_name] = tuple(lookup)
-        self.assertEqual(result, expected)
-
     def test_check_integers_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, int)
-            expected = col_name in self.integers
+            expected = col_name in TEST_DATA[int]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], int) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., int) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -338,30 +154,29 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_integers_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, int)
-            expected = col_name in self.integers
+            expected = col_name in TEST_DATA[int]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], int) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., int) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_integers_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: int})
-            expected = col_name in self.integers
+            expected = col_name in TEST_DATA[int]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: int}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: int}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -369,16 +184,16 @@ class CheckDtypeTests(unittest.TestCase):
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_integers_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: int})
-            expected = col_name in self.integers
+            expected = col_name in TEST_DATA[int]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: int}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: int}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -387,15 +202,14 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_floats_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, float)
-            expected = col_name in self.floats
+            expected = col_name in TEST_DATA[float]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], float) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., float) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -403,30 +217,29 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_floats_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, float)
-            expected = col_name in self.floats
+            expected = col_name in TEST_DATA[float]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], float) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., float) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_floats_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: float})
-            expected = col_name in self.floats
+            expected = col_name in TEST_DATA[float]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: float}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: float}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -434,16 +247,16 @@ class CheckDtypeTests(unittest.TestCase):
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_floats_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: float})
-            expected = col_name in self.floats
+            expected = col_name in TEST_DATA[float]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: float}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: float}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -452,15 +265,14 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_complex_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, complex)
-            expected = col_name in self.complex
+            expected = col_name in TEST_DATA[complex]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], complex) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., complex) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -468,48 +280,47 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_complex_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, complex)
-            expected = col_name in self.complex
+            expected = col_name in TEST_DATA[complex]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], complex) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., complex) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_complex_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: complex})
-            expected = col_name in self.complex
+            expected = col_name in TEST_DATA[complex]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: complex}}) != "
-                           f"{expected}")
+                context = (f"check_dtypes(df, {{{repr(col_name)}: complex}}) "
+                           f"!= {expected}")
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_complex_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: complex})
-            expected = col_name in self.complex
+            expected = col_name in TEST_DATA[complex]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: complex}}) != "
-                           f"{expected}")
+                context = (f"check_dtypes(df, {{{repr(col_name)}: complex}}) "
+                           f"!= {expected}")
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -517,15 +328,14 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_strings_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, str)
-            expected = col_name in self.strings
+            expected = col_name in TEST_DATA[str]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], str) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., str) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -533,30 +343,29 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_strings_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, str)
-            expected = col_name in self.strings
+            expected = col_name in TEST_DATA[str]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], str) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., str) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_strings_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: str})
-            expected = col_name in self.strings
+            expected = col_name in TEST_DATA[str]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: str}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: str}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -564,16 +373,16 @@ class CheckDtypeTests(unittest.TestCase):
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_strings_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: str})
-            expected = col_name in self.strings
+            expected = col_name in TEST_DATA[str]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: str}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: str}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -582,15 +391,14 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_booleans_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, bool)
-            expected = col_name in self.booleans
+            expected = col_name in TEST_DATA[bool]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], bool) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., bool) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -598,30 +406,29 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_booleans_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, bool)
-            expected = col_name in self.booleans
+            expected = col_name in TEST_DATA[bool]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], bool) "
-                           f"!= {expected}")
+                context = f"check_dtypes({data[:3]}..., bool) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_booleans_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: bool})
-            expected = col_name in self.booleans
+            expected = col_name in TEST_DATA[bool]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: bool}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: bool}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -629,16 +436,16 @@ class CheckDtypeTests(unittest.TestCase):
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_booleans_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: bool})
-            expected = col_name in self.booleans
+            expected = col_name in TEST_DATA[bool]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: bool}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: bool}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -647,15 +454,14 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_datetimes_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, datetime)
-            expected = col_name in self.datetimes
+            expected = col_name in TEST_DATA[datetime]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], "
-                           f"datetime) != {expected}")
+                context = f"check_dtypes({data[:3]}..., datetime) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -663,48 +469,47 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_datetimes_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, datetime)
-            expected = col_name in self.datetimes
+            expected = col_name in TEST_DATA[datetime]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], "
-                           f"datetime) != {expected}")
+                context = f"check_dtypes({data[:3]}..., datetime) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_datetimes_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: datetime})
-            expected = col_name in self.datetimes
+            expected = col_name in TEST_DATA[datetime]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: datetime}}) != "
-                           f"{expected}")
+                context = (f"check_dtypes(df, {{{repr(col_name)}: datetime}}) "
+                           f"!= {expected}")
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_datetimes_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: datetime})
-            expected = col_name in self.datetimes
+            expected = col_name in TEST_DATA[datetime]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: datetime}}) != "
-                           f"{expected}")
+                context = (f"check_dtypes(df, {{{repr(col_name)}: datetime}}) "
+                           f"!= {expected}")
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -712,15 +517,14 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_timedeltas_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, timedelta)
-            expected = col_name in self.timedeltas
+            expected = col_name in TEST_DATA[timedelta]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], "
-                           f"timedelta) != {expected}")
+                context = f"check_dtypes({data[:3]}..., timedelta) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -728,48 +532,47 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_timedeltas_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, timedelta)
-            expected = col_name in self.timedeltas
+            expected = col_name in TEST_DATA[timedelta]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], "
-                           f"timedelta) != {expected}")
+                context = f"check_dtypes({data[:3]}..., timedelta) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_timedeltas_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: timedelta})
-            expected = col_name in self.timedeltas
+            expected = col_name in TEST_DATA[timedelta]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: timedelta}}) != "
-                           f"{expected}")
+                context = (f"check_dtypes(df, {{{repr(col_name)}: timedelta}}) "
+                           f"!= {expected}")
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_timedeltas_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: timedelta})
-            expected = col_name in self.timedeltas
+            expected = col_name in TEST_DATA[timedelta]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: timedelta}}) != "
-                           f"{expected}")
+                context = (f"check_dtypes(df, {{{repr(col_name)}: timedelta}}) "
+                           f"!= {expected}")
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -777,15 +580,14 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_objects_series_no_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data)
             result = check_dtypes(series, object)
-            expected = col_name in self.objects
+            expected = col_name in TEST_DATA[object]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], "
-                           f"object) != {expected}")
+                context = f"check_dtypes({data[:3]}..., object) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -793,30 +595,29 @@ class CheckDtypeTests(unittest.TestCase):
 
     def test_check_objects_series_with_na(self):
         failed = []
-        for col_name, data in self.all_data.items():
+        for col_name, data in ALL_DATA.items():
             series = pd.Series(data + [None])
             result = check_dtypes(series, object)
-            expected = col_name in self.objects
+            expected = col_name in TEST_DATA[object]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(all_data[{repr(col_name)}], "
-                           f"object) != {expected}")
+                context = f"check_dtypes({data[:3]}..., object) != {expected}"
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_objects_df_no_na(self):
-        df = pd.DataFrame(self.all_data)
+        df = pd.DataFrame(ALL_DATA)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: object})
-            expected = col_name in self.objects
+            expected = col_name in TEST_DATA[object]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: object}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: object}}) != "
                            f"{expected}")
                 failed.append(context)
         if len(failed) > 0:
@@ -824,17 +625,145 @@ class CheckDtypeTests(unittest.TestCase):
             raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
 
     def test_check_object_df_with_na(self):
-        with_na = {k: v + [None] for k, v in self.all_data.items()}
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
         df = pd.DataFrame(with_na)
         failed = []
         for col_name in df.columns:
             result = check_dtypes(df, {col_name: object})
-            expected = col_name in self.objects
+            expected = col_name in TEST_DATA[object]
             try:
                 self.assertEqual(result, expected)
             except AssertionError:
-                context = (f"check_dtypes(df, {{{col_name}: object}}) != "
+                context = (f"check_dtypes(df, {{{repr(col_name)}: object}}) != "
                            f"{expected}")
+                failed.append(context)
+        if len(failed) > 0:
+            joined = "\n\t".join(failed)
+            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
+
+
+class CheckDtypeArgumentTests(unittest.TestCase):
+
+    def test_check_dtypes_series_no_typespec_no_na(self):
+        failed = []
+        for col_name, data in ALL_DATA.items():
+            series = pd.Series(data)
+            result = check_dtypes(series)
+            lookup = [typespec for typespec, subset in TEST_DATA.items()
+                      if col_name in subset]
+            self.assertEqual(len(lookup), 1)
+            expected = lookup[0]
+            try:
+                self.assertEqual(result, expected)
+            except AssertionError:
+                context = f"check_dtypes({list(series.head(2))}) != {expected}"
+                failed.append(context)
+        if len(failed) > 0:
+            joined = "\n\t".join(failed)
+            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
+
+    def test_check_dtypes_series_no_typespec_with_na(self):
+        failed = []
+        for col_name, data in ALL_DATA.items():
+            series = pd.Series(data + [None])
+            result = check_dtypes(series)
+            lookup = [typespec for typespec, subset in TEST_DATA.items()
+                      if col_name in subset]
+            self.assertEqual(len(lookup), 1)
+            expected = lookup[0]
+            try:
+                self.assertEqual(result, expected)
+            except AssertionError:
+                context = f"check_dtypes({list(series.head(2))}) != {expected}"
+                failed.append(context)
+        if len(failed) > 0:
+            joined = "\n\t".join(failed)
+            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
+
+    def test_check_dtypes_df_no_typespec_no_na(self):
+        df = pd.DataFrame(ALL_DATA)
+        result = check_dtypes(df)
+        expected = {}
+        for col_name in df.columns:
+            lookup = [typespec for typespec, subset in TEST_DATA.items()
+                      if col_name in subset]
+            self.assertEqual(len(lookup), 1)
+            expected[col_name] = lookup[0]
+        self.assertEqual(result, expected)
+
+    def test_check_dtypes_df_no_typespec_with_na(self):
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
+        df = pd.DataFrame(with_na)
+        result = check_dtypes(df)
+        expected = {}
+        for col_name in df.columns:
+            lookup = [typespec for typespec, subset in TEST_DATA.items()
+                      if col_name in subset]
+            self.assertEqual(len(lookup), 1)
+            expected[col_name] = lookup[0]
+        self.assertEqual(result, expected)
+
+    def test_check_dtypes_series_multiple_typespecs_no_na(self):
+        failed = []
+        all_types = tuple(TEST_DATA)
+        types_str = tuple([t.__name__ for t in all_types])
+        for data in ALL_DATA.values():
+            series = pd.Series(data)
+            try:
+                self.assertTrue(check_dtypes(series, all_types))
+            except AssertionError:
+                context = (f"check_dtypes({list(series.head(2))}, "
+                           f"{types_str}) != True")
+                failed.append(context)
+        if len(failed) > 0:
+            joined = "\n\t".join(failed)
+            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
+
+    def test_check_dtypes_series_multiple_typespecs_with_na(self):
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
+        failed = []
+        all_types = tuple(TEST_DATA)
+        types_str = tuple([t.__name__ for t in all_types])
+        for data in with_na.values():
+            series = pd.Series(data)
+            try:
+                self.assertTrue(check_dtypes(series, all_types))
+            except AssertionError:
+                context = (f"check_dtypes({list(series.head(2))}, "
+                           f"{types_str}) != True")
+                failed.append(context)
+        if len(failed) > 0:
+            joined = "\n\t".join(failed)
+            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
+
+    def test_check_dtypes_df_multiple_typespecs_no_na(self):
+        df = pd.DataFrame(ALL_DATA)
+        failed = []
+        all_types = tuple(TEST_DATA)
+        types_str = tuple([t.__name__ for t in all_types])
+        for col_name in df.columns:
+            try:
+                self.assertTrue(check_dtypes(df, {col_name: all_types}))
+            except AssertionError:
+                context = (f"check_dtypes(df, {{{repr(col_name)}: "
+                           f"{types_str}}}) != True")
+                failed.append(context)
+        if len(failed) > 0:
+            joined = "\n\t".join(failed)
+            raise AssertionError(f"{len(failed)} failed checks:\n\t{joined}")
+
+    def test_check_dtypes_df_multiple_typespecs_with_na(self):
+        with_na = {k: v + [None] for k, v in ALL_DATA.items()}
+        df = pd.DataFrame(with_na)
+        failed = []
+        all_types = tuple(TEST_DATA)
+        types_str = tuple([t.__name__ for t in all_types])
+        for col_name in df.columns:
+            try:
+                self.assertTrue(check_dtypes(df, {col_name: all_types}))
+            except AssertionError:
+                context = (f"check_dtypes(df, {{{repr(col_name)}: "
+                           f"{types_str}}}) != True")
                 failed.append(context)
         if len(failed) > 0:
             joined = "\n\t".join(failed)
@@ -848,8 +777,9 @@ class CheckDtypeErrorTests(unittest.TestCase):
         with self.assertRaises(TypeError) as err:
             check_dtypes(series, {"shouldn't be a dictionary": int})
         err_msg = ("[datatube.dtype.check_dtypes] when used on a series, "
-                   "`typespec` must be an atomic data type or None (received "
-                   "object of type: <class 'dict'>)")
+                   "`typespec` must be an atomic data type, sequence of atomic "
+                   "data types, or None (received object of type: <class "
+                   "'dict'>)")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_check_dtypes_df_bad_typespec_type(self):
@@ -857,9 +787,9 @@ class CheckDtypeErrorTests(unittest.TestCase):
         with self.assertRaises(TypeError) as err:
             check_dtypes(df, "bad typespec")
         err_msg = ("[datatube.dtype.check_dtypes] when used on a dataframe, "
-                   "`typespec` must be an atomic data type, a map of column "
-                   "names and atomic data types, or None (received object of "
-                   "type: <class 'str'>)")
+                   "`typespec` must be an atomic data type, sequence of atomic "
+                   "data types, map of column names and atomic data types, or "
+                   "None (received object of type: <class 'str'>)")
         self.assertEqual(str(err.exception), err_msg)
 
     def test_check_dtypes_bad_data_type(self):
@@ -870,7 +800,6 @@ class CheckDtypeErrorTests(unittest.TestCase):
                     "pandas.Series or pandas.DataFrame instance (received "
                     "object of type: <class 'list'>)")
         self.assertEqual(str(err.exception), err_msg)
-
 
 
 if __name__ == "__main__":
